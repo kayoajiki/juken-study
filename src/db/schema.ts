@@ -1,0 +1,130 @@
+import {
+  index,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  displayName: text("display_name"),
+  totalStudyMinutes: integer("total_study_minutes").notNull().default(0),
+  totalPoints: integer("total_points").notNull().default(0),
+  currentStreak: integer("current_streak").notNull().default(0),
+  lastStudyLocalDate: text("last_study_local_date"),
+  notificationEnabled: integer("notification_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  dailyGoalMinutes: integer("daily_goal_minutes").notNull().default(0),
+  monthlyPoints: integer("monthly_points").notNull().default(0),
+  monthlySeason: text("monthly_season"),
+  bestMonthlyPoints: integer("best_monthly_points").notNull().default(0),
+  bestMonthlySeason: text("best_monthly_season"),
+  consecutivePerfectMonths: integer("consecutive_perfect_months").notNull().default(0),
+  earnedBadges: text("earned_badges").notNull().default("[]"),
+  dailyBonusLocalDate: text("daily_bonus_local_date"),
+  dailyBonusTripleUsed: integer("daily_bonus_triple_used").notNull().default(0),
+  selfStudyStreak: integer("self_study_streak").notNull().default(0),
+  lastSelfStudyLocalDate: text("last_self_study_local_date"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const studySessions = sqliteTable(
+  "study_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    kind: text("kind").notNull(),
+    minutes: integer("minutes").notNull(),
+    startedAt: text("started_at").notNull(),
+    endedAt: text("ended_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("study_sessions_user_id_idx").on(t.userId),
+    index("study_sessions_user_started_idx").on(t.userId, t.startedAt),
+  ]
+);
+
+export const schedules = sqliteTable(
+  "schedules",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull(),
+    timeOfDay: text("time_of_day").notNull(),
+    targetMinutes: integer("target_minutes").notNull().default(30),
+    repeatType: text("repeat_type").notNull(),
+    weekday: integer("weekday"),
+    targetDate: text("target_date"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at").notNull(),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [index("schedules_user_id_idx").on(t.userId)]
+);
+
+export const breakRules = sqliteTable(
+  "break_rules",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    minBlockMinutes: integer("min_block_minutes").notNull(),
+    maxBlockMinutes: integer("max_block_minutes").notNull(),
+    breakMinutes: integer("break_minutes").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("break_rules_user_id_idx").on(t.userId)]
+);
+
+export const monthlyTestReports = sqliteTable(
+  "monthly_test_reports",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    yearMonth: text("year_month").notNull(),
+    title: text("title"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("monthly_test_reports_user_ym").on(t.userId, t.yearMonth),
+    index("monthly_test_reports_user_idx").on(t.userId),
+  ]
+);
+
+export const testResultNodes = sqliteTable(
+  "test_result_nodes",
+  {
+    id: text("id").primaryKey(),
+    reportId: text("report_id")
+      .notNull()
+      .references(() => monthlyTestReports.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"),
+    label: text("label").notNull(),
+    subjectKey: text("subject_key"),
+    score: real("score"),
+    deviation: real("deviation"),
+    scale10: integer("scale10"),
+    rankNational: text("rank_national"),
+    rankGender: text("rank_gender"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    index("test_result_nodes_report_idx").on(t.reportId),
+    index("test_result_nodes_parent_idx").on(t.parentId),
+  ]
+);

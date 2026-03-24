@@ -1,0 +1,16 @@
+{
+  "name": "中学受験 勉強コンパス",
+  "short_name": "勉強コンパス",
+  "description": "数字とグラフで努力を可視化する勉強記録アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}

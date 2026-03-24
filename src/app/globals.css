@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    ui-sans-serif, system-ui, sans-serif;
+
+  /*
+    ★ kawaii ライトテーマ
+    ─ slate スケールを明→暗に反転マッピング（文字・ボーダー用）
+  */
+
+  --color-slate-50:  #fef8ff;
+  --color-slate-100: #f3e8ff;
+  --color-slate-200: #0e001e;   /* dark heading text — 最濃 */
+  --color-slate-300: #1e0540;   /* dark text */
+  --color-slate-400: #3a0e78;   /* sub-text — しっかり読める濃い紫 */
+  --color-slate-500: #5828a0;   /* faint text — まだ読める */
+  --color-slate-600: #8a5ec8;   /* ボーダー / faint accent */
+  --color-slate-700: #c8a8ee;   /* カード内ボーダー */
+  --color-slate-800: #e5d0fc;   /* 内側要素の背景 */
+  --color-slate-900: #f0e6ff;   /* カード背景 */
+  --color-slate-950: #faf4ff;   /* 最も明るい（薄 bg 用） */
+}
+
+:root {
+  --gold: #d97706;
+  --gold-light: #fbbf24;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: linear-gradient(135deg, #fff0f8 0%, #fddeed 20%, #fde8ff 50%, #ede9fe 80%, #e0f2fe 100%);
+  background-attachment: fixed;
+  color: #12002e;
+  min-height: 100dvh;
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
+/*
+  ──────────────────────────────────────────────────────────
+  Tailwind utilities は @layer utilities（名前付きレイヤー）に
+  出力される。未レイヤー CSS は名前付きレイヤーより常に優先される。
+  ──────────────────────────────────────────────────────────
+*/
+
+/* グラデーションクリップテキスト（金色 etc.）は transparent を維持 */
+.bg-clip-text.text-transparent {
+  color: transparent !important;
+}
