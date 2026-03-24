@@ -62,21 +62,6 @@ export async function deleteStudySessionAction(
     .from(studySessions)
     .where(eq(studySessions.userId, userId));
 
-  // 自主学習連続の再計算
-  const selfStudyDates = new Set(
-    remaining.filter((r) => r.kind === "self_study").map((r) => tokyoYmd(new Date(r.startedAt)))
-  );
-  let selfStudyStreak = 0;
-  let checkSelfDate = today;
-  while (selfStudyDates.has(checkSelfDate)) {
-    selfStudyStreak++;
-    const d = new Date(`${checkSelfDate}T00:00:00+09:00`);
-    d.setDate(d.getDate() - 1);
-    checkSelfDate = tokyoYmd(d);
-  }
-  const sortedSelfStudyDates = [...selfStudyDates].sort();
-  const lastSelfStudyLocalDate = sortedSelfStudyDates.length > 0 ? sortedSelfStudyDates[sortedSelfStudyDates.length - 1] : null;
-
   const newTotalMinutes = remaining.reduce((s, r) => s + r.minutes, 0);
 
   const [profile] = await db
@@ -101,6 +86,21 @@ export async function deleteStudySessionAction(
   // Recalculate streak from remaining sessions
   const today = tokyoYmd();
   const studiedDates = new Set(remaining.map((r) => tokyoYmd(new Date(r.startedAt))));
+
+  // 自主学習連続の再計算
+  const selfStudyDates = new Set(
+    remaining.filter((r) => r.kind === "self_study").map((r) => tokyoYmd(new Date(r.startedAt)))
+  );
+  let selfStudyStreak = 0;
+  let checkSelfDate = today;
+  while (selfStudyDates.has(checkSelfDate)) {
+    selfStudyStreak++;
+    const d = new Date(`${checkSelfDate}T00:00:00+09:00`);
+    d.setDate(d.getDate() - 1);
+    checkSelfDate = tokyoYmd(d);
+  }
+  const sortedSelfStudyDates = [...selfStudyDates].sort();
+  const lastSelfStudyLocalDate = sortedSelfStudyDates.length > 0 ? sortedSelfStudyDates[sortedSelfStudyDates.length - 1] : null;
   let streak = 0;
   let checkDate = today;
   while (studiedDates.has(checkDate)) {
