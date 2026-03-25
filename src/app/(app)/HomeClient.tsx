@@ -8,6 +8,7 @@ import type { EarnedBadge } from "@/lib/badges";
 import { tokyoYmd } from "@/lib/tokyo-date";
 import {
   addHomeTopicCommentAction,
+  deleteHomeTopicCommentAction,
   getHomeTopicInteractionsAction,
   toggleHomeTopicStampAction,
 } from "@/app/actions/home-topics";
@@ -57,6 +58,7 @@ export function HomeClient({
     text: string;
     userId: string;
     createdAtMs: number;
+    mine: boolean;
   };
 
   type TopicInteractions = {
@@ -484,12 +486,31 @@ export function HomeClient({
                 <div className="mt-2 max-w-[190px] text-right">
                   <div className="space-y-1">
                     {activeComments.slice(-3).map((c) => (
-                      <p
-                        key={c.id}
-                        className="text-[11px] font-bold text-slate-700 break-words leading-tight"
-                      >
-                        {c.text}
-                      </p>
+                      <div key={c.id} className="flex items-start justify-end gap-2">
+                        <p className="min-w-0 break-words text-[11px] font-bold text-slate-700 leading-tight">
+                          {c.text}
+                        </p>
+                        {c.mine && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!activeTopic) return;
+                              void (async () => {
+                                await deleteHomeTopicCommentAction({
+                                  dateKey: todayYmd,
+                                  topicId: activeTopic.id,
+                                  commentId: c.id,
+                                });
+                                await refreshTopics([activeTopic.id]);
+                              })();
+                            }}
+                            className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-500 hover:bg-rose-100"
+                            aria-label="コメントを削除"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </div>

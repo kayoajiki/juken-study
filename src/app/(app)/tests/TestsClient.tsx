@@ -189,7 +189,8 @@ export function TestsClient({
   const [quizMath, setQuizMath] = useState("");
   const [quizSci, setQuizSci] = useState("");
   const [quizSoc, setQuizSoc] = useState("");
-  const [quizMax, setQuizMax] = useState("");
+  // 「満点」入力欄は削除したため、常に未設定扱い（null保存）
+  const [quizMax] = useState("");
   const [quizMsg, setQuizMsg] = useState<string | null>(null);
   const [weakSelectedId, setWeakSelectedId] = useState<string | null>(
     initialReports[initialReports.length - 1]?.id ?? null
@@ -474,8 +475,8 @@ export function TestsClient({
   const weakSelectedReport = reports.find((r) => r.id === weakSelectedId);
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "weekly", label: "📋 小テスト" },
     { key: "input", label: "📝 記録する" },
+    { key: "weekly", label: "📋 小テスト" },
     { key: "trend", label: "📈 推移" },
     { key: "units", label: "🔬 単元推移" },
     { key: "weak", label: "🔍 弱点" },
@@ -1112,18 +1113,6 @@ export function TestsClient({
                     />
                   </div>
                 ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="w-10 text-xs font-bold text-slate-600">満点</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={quizMax}
-                  onChange={(e) => setQuizMax(e.target.value)}
-                  onFocus={(e) => e.target.select()}
-                  placeholder="省略可"
-                  className="w-28 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900"
-                />
               </div>
             </div>
             {quizMsg && (

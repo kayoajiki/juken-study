@@ -13,7 +13,10 @@ export async function getHomeTopicInteractionsAction(input: {
 }): Promise<{
   counts: Record<string, { likes: number; sparks: number; cheers: number; focuses: number; stars: number }>;
   my: Record<string, { likes: boolean; sparks: boolean; cheers: boolean; focuses: boolean; stars: boolean }>;
-  comments: Record<string, { id: string; userId: string; text: string; createdAtMs: number }[]>;
+  comments: Record<
+    string,
+    { id: string; userId: string; text: string; createdAtMs: number; mine: boolean }[]
+  >;
 }> {
   const userId = await getSessionUserId();
   const topicIds = input.topicIds ?? [];
@@ -25,7 +28,10 @@ export async function getHomeTopicInteractionsAction(input: {
 
   const counts: Record<string, { likes: number; sparks: number; cheers: number; focuses: number; stars: number }> = {};
   const my: Record<string, { likes: boolean; sparks: boolean; cheers: boolean; focuses: boolean; stars: boolean }> = {};
-  const comments: Record<string, { id: string; userId: string; text: string; createdAtMs: number }[]> = {};
+  const comments: Record<
+    string,
+    { id: string; userId: string; text: string; createdAtMs: number; mine: boolean }[]
+  > = {};
 
   for (const id of topicIds) {
     counts[id] = { likes: 0, sparks: 0, cheers: 0, focuses: 0, stars: 0 };
@@ -81,6 +87,7 @@ export async function getHomeTopicInteractionsAction(input: {
       userId: c.userId,
       text: c.text,
       createdAtMs: c.createdAtMs,
+      mine: c.userId === userId,
     });
   }
 
@@ -91,6 +98,36 @@ export async function getHomeTopicInteractionsAction(input: {
 
   // ログイン無しでも counts/comments は見える
   return { counts, my, comments };
+}
+
+export async function deleteHomeTopicCommentAction(input: {
+  dateKey: string;
+  topicId: string;
+  commentId: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "ログインが必要です" };
+
+  const db = getDb();
+
+  const [existing] = await db
+    .select()
+    .from(homeTopicComments)
+    .where(
+      and(
+        eq(homeTopicComments.id, input.commentId),
+        eq(homeTopicComments.userId, userId),
+        eq(homeTopicComments.dateKey, input.dateKey),
+        eq(homeTopicComments.topicId, input.topicId)
+      )
+    )
+    .limit(1);
+
+  if (!existing) return { ok: false, error: "コメントが見つかりません" };
+
+  await db.delete(homeTopicComments).where(eq(homeTopicComments.id, input.commentId));
+  revalidatePath("/");
+  return { ok: true };
 }
 
 export async function toggleHomeTopicStampAction(input: {
