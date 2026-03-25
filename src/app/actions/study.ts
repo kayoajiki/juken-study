@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { getDb, studySessions, users } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
 import { recordStudySessionDb } from "@/lib/record-session";
@@ -141,7 +141,11 @@ export async function subtractStudyMinutesAction(input: {
   const db = getDb();
   let remaining = input.minutes;
 
-  // 同じ教科・種類の直近セッションから順に引いていく
+  // 今日の日本時間の開始時刻
+  const today = tokyoYmd();
+  const todayStart = new Date(`${today}T00:00:00+09:00`).toISOString();
+
+  // 今日の同じ教科・種類のセッションを新しい順に取得
   const sessions = await db
     .select({ id: studySessions.id, minutes: studySessions.minutes })
     .from(studySessions)
@@ -149,17 +153,22 @@ export async function subtractStudyMinutesAction(input: {
       eq(studySessions.userId, userId),
       eq(studySessions.subject, input.subject),
       eq(studySessions.kind, input.kind),
+      gte(studySessions.startedAt, todayStart),
     ))
     .orderBy(desc(studySessions.startedAt));
+
+  if (sessions.length === 0) return { ok: false, error: "今日の該当する記録がありません" };
 
   for (const session of sessions) {
     if (remaining <= 0) break;
     if (session.minutes <= remaining) {
-      // セッション全体を削除
-      await db.delete(studySessions).where(eq(studySessions.id, session.id));
-      remaining -= session.minutes;
+      // セッションの分数を1に縮小（きろくに記録として残す）
+      await db.update(studySessions)
+        .set({ minutes: 1 })
+        .where(eq(studySessions.id, session.id));
+      remaining -= session.minutes - 1;
     } else {
-      // セッションの一部だけ削除（残りを更新）
+      // セッションの一部を減らす
       await db.update(studySessions)
         .set({ minutes: session.minutes - remaining })
         .where(eq(studySessions.id, session.id));
@@ -168,7 +177,7 @@ export async function subtractStudyMinutesAction(input: {
   }
 
   const subtracted = input.minutes - remaining;
-  if (subtracted === 0) return { ok: false, error: "該当する記録がありません" };
+  if (subtracted === 0) return { ok: false, error: "今日の該当する記録がありません" };
 
   // ユーザーの合計分数を更新
   const [profile] = await db.select({ totalStudyMinutes: users.totalStudyMinutes })
@@ -181,5 +190,6 @@ export async function subtractStudyMinutesAction(input: {
   }
 
   revalidatePath("/");
+  revalidatePath("/stats");
   return { ok: true, subtracted };
 }
