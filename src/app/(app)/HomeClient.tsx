@@ -6,6 +6,11 @@ import { Flame, BookOpen, Trophy } from "lucide-react";
 import { rankForPoints, RANKS } from "@/lib/points-rank";
 import type { EarnedBadge } from "@/lib/badges";
 import { tokyoYmd } from "@/lib/tokyo-date";
+import {
+  addHomeTopicCommentAction,
+  getHomeTopicInteractionsAction,
+  toggleHomeTopicStampAction,
+} from "@/app/actions/home-topics";
 
 type Profile = {
   display_name: string | null;
@@ -50,15 +55,13 @@ export function HomeClient({
   type TopicComment = {
     id: string;
     text: string;
-    createdAt: number; // epoch ms
+    userId: string;
+    createdAtMs: number;
   };
 
   type TopicInteractions = {
-    likes: Record<string, boolean>;
-    sparks: Record<string, boolean>; // "応援"スタンプ
-    cheers: Record<string, boolean>; // 💪 がんばれ
-    focuses: Record<string, boolean>; // 🎯 集中
-    stars: Record<string, boolean>; // 🌟 ナイス
+    counts: Record<string, { likes: number; sparks: number; cheers: number; focuses: number; stars: number }>;
+    my: Record<string, { likes: boolean; sparks: boolean; cheers: boolean; focuses: boolean; stars: boolean }>;
     comments: Record<string, TopicComment[]>;
   };
 
@@ -119,17 +122,13 @@ export function HomeClient({
   void sessions;
 
   const todayYmd = tokyoYmd();
-  const interactionsKey = `home_daily_topics_interactions_${todayYmd}`;
 
   const [topicIndex, setTopicIndex] = useState(0);
   const [topicSlideKey, setTopicSlideKey] = useState(0);
 
   const [interactions, setInteractions] = useState<TopicInteractions>({
-    likes: {},
-    sparks: {},
-    cheers: {},
-    focuses: {},
-    stars: {},
+    counts: {},
+    my: {},
     comments: {},
   });
 
@@ -138,32 +137,24 @@ export function HomeClient({
   const commentDraftRef = useRef<HTMLInputElement | null>(null);
   const topicLocked = commentOpenTopicId !== null; // コメント入力中は自動遷移を止める
 
-  useEffect(() => {
-    // ローカルにスタンプ/コメントを保存（サーバ永続は次フェーズ）
-    try {
-      const raw = localStorage.getItem(interactionsKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as TopicInteractions;
-      setInteractions({
-        likes: parsed.likes ?? {},
-        sparks: parsed.sparks ?? {},
-        cheers: parsed.cheers ?? {},
-        focuses: parsed.focuses ?? {},
-        stars: parsed.stars ?? {},
-        comments: parsed.comments ?? {},
-      });
-    } catch {
-      // ignore
-    }
-  }, [interactionsKey]);
+  const topicIds = useMemo(() => topics.map((t) => t.id), [topics]);
+  const topicIdsKey = topicIds.join("|");
 
-  const persistInteractions = (next: TopicInteractions) => {
-    try {
-      localStorage.setItem(interactionsKey, JSON.stringify(next));
-    } catch {
-      // ignore
-    }
+  const refreshTopics = async (idsOverride?: string[]) => {
+    const ids = idsOverride ?? topicIds;
+    if (ids.length === 0) return;
+    const res = await getHomeTopicInteractionsAction({ dateKey: todayYmd, topicIds: ids });
+    setInteractions((prev) => ({
+      counts: { ...prev.counts, ...res.counts },
+      my: { ...prev.my, ...res.my },
+      comments: { ...prev.comments, ...res.comments },
+    }));
   };
+
+  useEffect(() => {
+    void refreshTopics(topicIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayYmd, topicIdsKey]);
 
   useEffect(() => {
     if (topics.length <= 1) return;
@@ -193,83 +184,38 @@ export function HomeClient({
   const activeTopic = topics[topicIndex] ?? null;
   const activeComments = activeTopic ? interactions.comments[activeTopic.id] ?? [] : [];
 
-  const toggleLike = (topicId: string) => {
-    setInteractions((prev) => {
-      const next: TopicInteractions = {
-        ...prev,
-        likes: { ...prev.likes, [topicId]: !prev.likes[topicId] },
-      };
-      persistInteractions(next);
-      return next;
-    });
+  const toggleLike = async (topicId: string) => {
+    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "likes" });
+    await refreshTopics([topicId]);
   };
 
-  const toggleSpark = (topicId: string) => {
-    setInteractions((prev) => {
-      const next: TopicInteractions = {
-        ...prev,
-        sparks: { ...prev.sparks, [topicId]: !prev.sparks[topicId] },
-      };
-      persistInteractions(next);
-      return next;
-    });
+  const toggleSpark = async (topicId: string) => {
+    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "sparks" });
+    await refreshTopics([topicId]);
   };
 
-  const toggleCheers = (topicId: string) => {
-    setInteractions((prev) => {
-      const next: TopicInteractions = {
-        ...prev,
-        cheers: { ...prev.cheers, [topicId]: !prev.cheers[topicId] },
-      };
-      persistInteractions(next);
-      return next;
-    });
+  const toggleCheers = async (topicId: string) => {
+    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "cheers" });
+    await refreshTopics([topicId]);
   };
 
-  const toggleFocus = (topicId: string) => {
-    setInteractions((prev) => {
-      const next: TopicInteractions = {
-        ...prev,
-        focuses: { ...prev.focuses, [topicId]: !prev.focuses[topicId] },
-      };
-      persistInteractions(next);
-      return next;
-    });
+  const toggleFocus = async (topicId: string) => {
+    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "focuses" });
+    await refreshTopics([topicId]);
   };
 
-  const toggleStar = (topicId: string) => {
-    setInteractions((prev) => {
-      const next: TopicInteractions = {
-        ...prev,
-        stars: { ...prev.stars, [topicId]: !prev.stars[topicId] },
-      };
-      persistInteractions(next);
-      return next;
-    });
+  const toggleStar = async (topicId: string) => {
+    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "stars" });
+    await refreshTopics([topicId]);
   };
 
-  const submitComment = (topicId: string) => {
+  const submitComment = async (topicId: string) => {
     const text = commentDraft.trim();
     if (!text) return;
-    const c: TopicComment = {
-      id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
-      text: text.slice(0, 48), // "一言" 前提
-      createdAt: Date.now(),
-    };
-    setInteractions((prev) => {
-      const prevList = prev.comments[topicId] ?? [];
-      // コメントは常に最大3つまで（新しいものを追加して、あふれたら古いものを削除）
-      const nextList = [...prevList, c].slice(-3);
-      const next: TopicInteractions = {
-        ...prev,
-        comments: {
-          ...prev.comments,
-          [topicId]: nextList,
-        },
-      };
-      persistInteractions(next);
-      return next;
-    });
+
+    await addHomeTopicCommentAction({ dateKey: todayYmd, topicId, text });
+    await refreshTopics([topicId]);
+
     setCommentDraft("");
     setCommentOpenTopicId(null);
   };
@@ -428,9 +374,12 @@ export function HomeClient({
               <div className="grid grid-cols-2 gap-2 justify-items-end pb-1 w-auto">
                 <button
                   type="button"
-                  onClick={() => activeTopic && toggleLike(activeTopic.id)}
+                  onClick={() => {
+                    if (!activeTopic) return;
+                    void toggleLike(activeTopic.id);
+                  }}
                   className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
-                    activeTopic && interactions.likes[activeTopic.id]
+                    activeTopic && interactions.my[activeTopic.id]?.likes
                       ? "bg-fuchsia-600 text-white"
                       : "bg-white text-fuchsia-700 hover:bg-fuchsia-50 border border-fuchsia-200"
                   } whitespace-nowrap`}
@@ -438,14 +387,17 @@ export function HomeClient({
                 >
                   👍
                   <span className="hidden sm:inline">
-                    {activeTopic && interactions.likes[activeTopic.id] ? 1 : 0}
+                    {activeTopic ? interactions.counts[activeTopic.id]?.likes ?? 0 : 0}
                   </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => activeTopic && toggleSpark(activeTopic.id)}
+                  onClick={() => {
+                    if (!activeTopic) return;
+                    void toggleSpark(activeTopic.id);
+                  }}
                   className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
-                    activeTopic && interactions.sparks[activeTopic.id]
+                    activeTopic && interactions.my[activeTopic.id]?.sparks
                       ? "bg-amber-500 text-amber-950"
                       : "bg-white text-amber-600 hover:bg-amber-50 border border-amber-200"
                   } whitespace-nowrap`}
@@ -453,14 +405,17 @@ export function HomeClient({
                 >
                   ✨
                   <span className="hidden sm:inline">
-                    {activeTopic && interactions.sparks[activeTopic.id] ? 1 : 0}
+                    {activeTopic ? interactions.counts[activeTopic.id]?.sparks ?? 0 : 0}
                   </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => activeTopic && toggleCheers(activeTopic.id)}
+                  onClick={() => {
+                    if (!activeTopic) return;
+                    void toggleCheers(activeTopic.id);
+                  }}
                   className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
-                    activeTopic && interactions.cheers[activeTopic.id]
+                    activeTopic && interactions.my[activeTopic.id]?.cheers
                       ? "bg-emerald-600 text-white"
                       : "bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200"
                   } whitespace-nowrap`}
@@ -468,14 +423,17 @@ export function HomeClient({
                 >
                   💪
                   <span className="hidden sm:inline">
-                    {activeTopic && interactions.cheers[activeTopic.id] ? 1 : 0}
+                    {activeTopic ? interactions.counts[activeTopic.id]?.cheers ?? 0 : 0}
                   </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => activeTopic && toggleFocus(activeTopic.id)}
+                  onClick={() => {
+                    if (!activeTopic) return;
+                    void toggleFocus(activeTopic.id);
+                  }}
                   className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
-                    activeTopic && interactions.focuses[activeTopic.id]
+                    activeTopic && interactions.my[activeTopic.id]?.focuses
                       ? "bg-sky-700 text-white"
                       : "bg-white text-sky-700 hover:bg-sky-50 border border-sky-200"
                   } whitespace-nowrap`}
@@ -483,14 +441,17 @@ export function HomeClient({
                 >
                   🎯
                   <span className="hidden sm:inline">
-                    {activeTopic && interactions.focuses[activeTopic.id] ? 1 : 0}
+                    {activeTopic ? interactions.counts[activeTopic.id]?.focuses ?? 0 : 0}
                   </span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => activeTopic && toggleStar(activeTopic.id)}
+                  onClick={() => {
+                    if (!activeTopic) return;
+                    void toggleStar(activeTopic.id);
+                  }}
                   className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
-                    activeTopic && interactions.stars[activeTopic.id]
+                    activeTopic && interactions.my[activeTopic.id]?.stars
                       ? "bg-rose-600 text-white"
                       : "bg-white text-rose-700 hover:bg-rose-50 border border-rose-200"
                   } whitespace-nowrap`}
@@ -498,7 +459,7 @@ export function HomeClient({
                 >
                   🌟
                   <span className="hidden sm:inline">
-                    {activeTopic && interactions.stars[activeTopic.id] ? 1 : 0}
+                    {activeTopic ? interactions.counts[activeTopic.id]?.stars ?? 0 : 0}
                   </span>
                 </button>
                 <button
@@ -541,7 +502,7 @@ export function HomeClient({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  submitComment(activeTopic.id);
+                  void submitComment(activeTopic.id);
                 }}
                 className="flex items-center gap-2"
               >

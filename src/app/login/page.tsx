@@ -30,7 +30,7 @@ export default function LoginPage() {
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
       <div className="rounded-3xl border-2 border-pink-300 bg-white p-8 shadow-xl shadow-pink-200 backdrop-blur">
         <h1 className="text-2xl font-bold text-pink-600">✨ ログイン</h1>
-        <p className="mt-1 text-sm font-bold text-fuchsia-600">🌟 勉強コンパス</p>
+        <p className="mt-1 text-sm font-bold text-fuchsia-600">🌟 スタディコンパス</p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <label className="block text-sm font-bold text-violet-800">
             メール

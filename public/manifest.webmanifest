@@ -1,6 +1,6 @@
 {
-  "name": "中学受験 勉強コンパス",
-  "short_name": "勉強コンパス",
+  "name": "中学受験 スタディコンパス",
+  "short_name": "スタディコンパス",
   "description": "数字とグラフで努力を可視化する勉強記録アプリ",
   "start_url": "/",
   "display": "standalone",

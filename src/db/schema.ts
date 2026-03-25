@@ -89,6 +89,53 @@ export const breakRules = sqliteTable(
   (t) => [index("break_rules_user_id_idx").on(t.userId)]
 );
 
+// 家庭内で共有する「ホーム画面トピックス」スタンプ
+export const homeTopicStamps = sqliteTable(
+  "home_topic_stamps",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    dateKey: text("date_key").notNull(), // YYYY-MM-DD (Asia/Tokyo)
+    topicId: text("topic_id").notNull(),
+
+    likes: integer("likes", { mode: "boolean" }).notNull().default(false),
+    sparks: integer("sparks", { mode: "boolean" }).notNull().default(false), // 応援
+    cheers: integer("cheers", { mode: "boolean" }).notNull().default(false), // がんばれ
+    focuses: integer("focuses", { mode: "boolean" }).notNull().default(false), // 集中
+    stars: integer("stars", { mode: "boolean" }).notNull().default(false), // ナイス
+
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("home_topic_stamps_user_day_topic_unique").on(t.userId, t.dateKey, t.topicId),
+    index("home_topic_stamps_date_topic_idx").on(t.dateKey, t.topicId),
+  ]
+);
+
+// 家庭内で共有する「ホーム画面トピックス」コメント（最大3件/トピック）
+export const homeTopicComments = sqliteTable(
+  "home_topic_comments",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    dateKey: text("date_key").notNull(), // YYYY-MM-DD (Asia/Tokyo)
+    topicId: text("topic_id").notNull(),
+    comment: text("comment").notNull(),
+
+    createdAtMs: integer("created_at_ms").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("home_topic_comments_date_topic_idx").on(t.dateKey, t.topicId),
+    index("home_topic_comments_user_idx").on(t.userId),
+  ]
+);
+
 export const monthlyTestReports = sqliteTable(
   "monthly_test_reports",
   {

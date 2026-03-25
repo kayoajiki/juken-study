@@ -3,11 +3,11 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
-  title: "勉強コンパス — 中学受験",
+  title: "スタディコンパス — 中学受験",
   description:
     "数字とグラフで努力を可視化。自主学習がキラキラ伸びる勉強記録アプリ。",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "勉強コンパス" },
+  appleWebApp: { capable: true, title: "スタディコンパス" },
 };
 
 export const viewport: Viewport = {
