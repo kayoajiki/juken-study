@@ -1092,15 +1092,15 @@ export function TestsClient({
                   className="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:gap-x-4">
                 {([
                   { label: "国語", val: quizJa, set: setQuizJa },
                   { label: "算数", val: quizMath, set: setQuizMath },
                   { label: "理科", val: quizSci, set: setQuizSci },
                   { label: "社会", val: quizSoc, set: setQuizSoc },
                 ] as { label: string; val: string; set: (v: string) => void }[]).map(({ label, val, set }) => (
-                  <div key={label} className="flex items-center gap-2 min-w-0">
-                    <label className="w-8 shrink-0 text-xs font-bold text-slate-600">{label}</label>
+                  <div key={label} className="flex w-full items-center gap-2 min-w-0">
+                    <label className="w-7 shrink-0 sm:w-8 text-xs font-bold text-slate-600">{label}</label>
                     <input
                       type="number"
                       min={0}
@@ -1108,7 +1108,7 @@ export function TestsClient({
                       onChange={(e) => set(e.target.value)}
                       onFocus={(e) => e.target.select()}
                       placeholder="点"
-                      className="min-w-0 flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-2 text-sm font-semibold text-sky-900"
+                      className="min-w-0 w-full flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-2 text-sm font-semibold text-sky-900"
                     />
                   </div>
                 ))}
