@@ -179,12 +179,25 @@ export async function subtractStudyMinutesAction(input: {
   const subtracted = input.minutes - remaining;
   if (subtracted === 0) return { ok: false, error: "今日の該当する記録がありません" };
 
-  // ユーザーの合計分数を更新
-  const [profile] = await db.select({ totalStudyMinutes: users.totalStudyMinutes })
-    .from(users).where(eq(users.id, userId)).limit(1);
+  // ユーザーの合計分数・ポイントを更新
+  const [profile] = await db.select({
+    totalStudyMinutes: users.totalStudyMinutes,
+    totalPoints: users.totalPoints,
+    monthlyPoints: users.monthlyPoints,
+    monthlySeason: users.monthlySeason,
+  }).from(users).where(eq(users.id, userId)).limit(1);
   if (profile) {
+    const rawDeduct = rawPointsForSession(subtracted, input.kind);
+    const currentSeason = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit",
+    }).format(new Date()).slice(0, 7);
+    const newMonthlyPoints = (profile.monthlySeason ?? currentSeason) === currentSeason
+      ? Math.max(0, (profile.monthlyPoints ?? 0) - rawDeduct)
+      : (profile.monthlyPoints ?? 0);
     await db.update(users).set({
       totalStudyMinutes: Math.max(0, profile.totalStudyMinutes - subtracted),
+      totalPoints: Math.max(0, (profile.totalPoints ?? 0) - rawDeduct),
+      monthlyPoints: newMonthlyPoints,
       updatedAt: new Date().toISOString(),
     }).where(eq(users.id, userId));
   }
