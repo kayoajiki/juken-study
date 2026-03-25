@@ -56,6 +56,9 @@ export function HomeClient({
   type TopicInteractions = {
     likes: Record<string, boolean>;
     sparks: Record<string, boolean>; // "応援"スタンプ
+    cheers: Record<string, boolean>; // 💪 がんばれ
+    focuses: Record<string, boolean>; // 🎯 集中
+    stars: Record<string, boolean>; // 🌟 ナイス
     comments: Record<string, TopicComment[]>;
   };
 
@@ -124,6 +127,9 @@ export function HomeClient({
   const [interactions, setInteractions] = useState<TopicInteractions>({
     likes: {},
     sparks: {},
+    cheers: {},
+    focuses: {},
+    stars: {},
     comments: {},
   });
 
@@ -141,6 +147,9 @@ export function HomeClient({
       setInteractions({
         likes: parsed.likes ?? {},
         sparks: parsed.sparks ?? {},
+        cheers: parsed.cheers ?? {},
+        focuses: parsed.focuses ?? {},
+        stars: parsed.stars ?? {},
         comments: parsed.comments ?? {},
       });
     } catch {
@@ -200,6 +209,39 @@ export function HomeClient({
       const next: TopicInteractions = {
         ...prev,
         sparks: { ...prev.sparks, [topicId]: !prev.sparks[topicId] },
+      };
+      persistInteractions(next);
+      return next;
+    });
+  };
+
+  const toggleCheers = (topicId: string) => {
+    setInteractions((prev) => {
+      const next: TopicInteractions = {
+        ...prev,
+        cheers: { ...prev.cheers, [topicId]: !prev.cheers[topicId] },
+      };
+      persistInteractions(next);
+      return next;
+    });
+  };
+
+  const toggleFocus = (topicId: string) => {
+    setInteractions((prev) => {
+      const next: TopicInteractions = {
+        ...prev,
+        focuses: { ...prev.focuses, [topicId]: !prev.focuses[topicId] },
+      };
+      persistInteractions(next);
+      return next;
+    });
+  };
+
+  const toggleStar = (topicId: string) => {
+    setInteractions((prev) => {
+      const next: TopicInteractions = {
+        ...prev,
+        stars: { ...prev.stars, [topicId]: !prev.stars[topicId] },
       };
       persistInteractions(next);
       return next;
@@ -379,7 +421,7 @@ export function HomeClient({
             </div>
 
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => activeTopic && toggleLike(activeTopic.id)}
@@ -403,6 +445,42 @@ export function HomeClient({
                   aria-label="応援スタンプ"
                 >
                   ✨ {activeTopic && interactions.sparks[activeTopic.id] ? 1 : 0}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => activeTopic && toggleCheers(activeTopic.id)}
+                  className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
+                    activeTopic && interactions.cheers[activeTopic.id]
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200"
+                  }`}
+                  aria-label="がんばれ"
+                >
+                  💪 {activeTopic && interactions.cheers[activeTopic.id] ? 1 : 0}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => activeTopic && toggleFocus(activeTopic.id)}
+                  className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
+                    activeTopic && interactions.focuses[activeTopic.id]
+                      ? "bg-sky-700 text-white"
+                      : "bg-white text-sky-700 hover:bg-sky-50 border border-sky-200"
+                  }`}
+                  aria-label="集中"
+                >
+                  🎯 {activeTopic && interactions.focuses[activeTopic.id] ? 1 : 0}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => activeTopic && toggleStar(activeTopic.id)}
+                  className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
+                    activeTopic && interactions.stars[activeTopic.id]
+                      ? "bg-rose-600 text-white"
+                      : "bg-white text-rose-700 hover:bg-rose-50 border border-rose-200"
+                  }`}
+                  aria-label="ナイス"
+                >
+                  🌟 {activeTopic && interactions.stars[activeTopic.id] ? 1 : 0}
                 </button>
               </div>
 
