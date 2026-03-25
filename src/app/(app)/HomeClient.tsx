@@ -130,6 +130,7 @@ export function HomeClient({
   const [commentOpenTopicId, setCommentOpenTopicId] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const commentDraftRef = useRef<HTMLInputElement | null>(null);
+  const topicLocked = commentOpenTopicId !== null; // コメント入力中は自動遷移を止める
 
   useEffect(() => {
     // ローカルにスタンプ/コメントを保存（サーバ永続は次フェーズ）
@@ -157,16 +158,18 @@ export function HomeClient({
 
   useEffect(() => {
     if (topics.length <= 1) return;
+    if (topicLocked) return;
     const t = window.setInterval(() => {
       setTopicIndex((i) => (i + 1) % topics.length);
-    }, 5000);
+    }, 7000);
     return () => window.clearInterval(t);
-  }, [topics.length]);
+  }, [topics.length, topicLocked]);
 
   useEffect(() => {
     // トピック数が変わってもスライド位置がはみ出さないようにする
+    if (topicLocked) return;
     setTopicIndex((i) => Math.min(i, Math.max(0, topics.length - 1)));
-  }, [topics.length]);
+  }, [topics.length, topicLocked]);
 
   useEffect(() => {
     setTopicSlideKey((k) => k + 1);
