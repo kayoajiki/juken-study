@@ -106,6 +106,27 @@ export const monthlyTestReports = sqliteTable(
   ]
 );
 
+export const weeklyQuizzes = sqliteTable(
+  "weekly_quizzes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    quizDate: text("quiz_date").notNull(),
+    japaneseScore: real("japanese_score"),
+    mathScore: real("math_score"),
+    scienceScore: real("science_score"),
+    socialScore: real("social_score"),
+    maxScore: real("max_score"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("weekly_quizzes_user_id_idx").on(t.userId),
+    index("weekly_quizzes_user_date_idx").on(t.userId, t.quizDate),
+  ]
+);
+
 export const testResultNodes = sqliteTable(
   "test_result_nodes",
   {

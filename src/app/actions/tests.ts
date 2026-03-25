@@ -1,8 +1,93 @@
 "use server";
 
-import { asc, eq, inArray } from "drizzle-orm";
-import { getDb, monthlyTestReports, testResultNodes } from "@/db";
+import { and, asc, eq, inArray } from "drizzle-orm";
+import { getDb, monthlyTestReports, testResultNodes, weeklyQuizzes } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
+
+// ── 週テスト ──────────────────────────────────────────────────────
+
+export type WeeklyQuizDTO = {
+  id: string;
+  quiz_date: string;
+  japanese_score: number | null;
+  math_score: number | null;
+  science_score: number | null;
+  social_score: number | null;
+  max_score: number | null;
+};
+
+export async function listWeeklyQuizzesAction(): Promise<WeeklyQuizDTO[]> {
+  const userId = await getSessionUserId();
+  if (!userId) return [];
+  const rows = await getDb()
+    .select()
+    .from(weeklyQuizzes)
+    .where(eq(weeklyQuizzes.userId, userId))
+    .orderBy(asc(weeklyQuizzes.quizDate));
+  return rows.map((r) => ({
+    id: r.id,
+    quiz_date: r.quizDate,
+    japanese_score: r.japaneseScore,
+    math_score: r.mathScore,
+    science_score: r.scienceScore,
+    social_score: r.socialScore,
+    max_score: r.maxScore,
+  }));
+}
+
+export async function saveWeeklyQuizAction(input: {
+  quizDate: string;
+  japaneseScore: number | null;
+  mathScore: number | null;
+  scienceScore: number | null;
+  socialScore: number | null;
+  maxScore: number | null;
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "未ログイン" };
+  const db = getDb();
+
+  // 同じユーザー・同じ日付があれば更新、なければ挿入
+  const [existing] = await db
+    .select({ id: weeklyQuizzes.id })
+    .from(weeklyQuizzes)
+    .where(and(eq(weeklyQuizzes.userId, userId), eq(weeklyQuizzes.quizDate, input.quizDate)))
+    .limit(1);
+
+  const scores = {
+    japaneseScore: input.japaneseScore,
+    mathScore: input.mathScore,
+    scienceScore: input.scienceScore,
+    socialScore: input.socialScore,
+    maxScore: input.maxScore,
+  };
+
+  if (existing) {
+    await db.update(weeklyQuizzes).set(scores).where(eq(weeklyQuizzes.id, existing.id));
+    return { ok: true, id: existing.id };
+  }
+  const id = crypto.randomUUID();
+  await db.insert(weeklyQuizzes).values({
+    id, userId, quizDate: input.quizDate, ...scores, createdAt: new Date().toISOString(),
+  });
+  return { ok: true, id };
+}
+
+export async function deleteWeeklyQuizAction(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "未ログイン" };
+  const db = getDb();
+  const [row] = await db
+    .select({ userId: weeklyQuizzes.userId })
+    .from(weeklyQuizzes)
+    .where(eq(weeklyQuizzes.id, id))
+    .limit(1);
+  if (!row || row.userId !== userId) return { ok: false, error: "権限がありません" };
+  await db.delete(weeklyQuizzes).where(eq(weeklyQuizzes.id, id));
+  return { ok: true };
+}
 
 export type TestNodeDTO = {
   id: string;

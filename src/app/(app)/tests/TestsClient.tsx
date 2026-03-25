@@ -7,6 +7,9 @@ import {
   listAllTestNodesForChartsAction,
   listTestNodesAction,
   saveTestNodesAction,
+  saveWeeklyQuizAction,
+  deleteWeeklyQuizAction,
+  type WeeklyQuizDTO,
 } from "@/app/actions/tests";
 import { SUBJECTS, subjectById, type SubjectId } from "@/lib/subjects";
 import {
@@ -50,7 +53,7 @@ type SubjectInput = {
   units: UnitInput[];
 };
 
-type Tab = "input" | "trend" | "weak" | "units";
+type Tab = "input" | "trend" | "weak" | "units" | "weekly";
 
 function getRating(score: number, max: number) {
   const pct = max > 0 ? (score / max) * 100 : 0;
@@ -170,12 +173,24 @@ function nodeRowToTNode(r: NodeRow): TNode {
 export function TestsClient({
   initialReports,
   initialNodes,
+  initialQuizzes,
 }: {
   initialReports: Report[];
   initialNodes: NodeRow[];
+  initialQuizzes: WeeklyQuizDTO[];
 }) {
   const [reports, setReports] = useState<Report[]>(initialReports);
   const [selectedId, setSelectedId] = useState<string | null>(initialReports[0]?.id ?? null);
+
+  // 小テスト
+  const [quizzes, setQuizzes] = useState<WeeklyQuizDTO[]>(initialQuizzes);
+  const [quizDate, setQuizDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [quizJa, setQuizJa] = useState("");
+  const [quizMath, setQuizMath] = useState("");
+  const [quizSci, setQuizSci] = useState("");
+  const [quizSoc, setQuizSoc] = useState("");
+  const [quizMax, setQuizMax] = useState("");
+  const [quizMsg, setQuizMsg] = useState<string | null>(null);
   const [weakSelectedId, setWeakSelectedId] = useState<string | null>(
     initialReports[initialReports.length - 1]?.id ?? null
   );
@@ -413,10 +428,53 @@ export function TestsClient({
     return result.sort((a, b) => a.pct - b.pct);
   }, [allNodes, weakSelectedId]);
 
+  const saveQuiz = async () => {
+    setQuizMsg(null);
+    const res = await saveWeeklyQuizAction({
+      quizDate,
+      japaneseScore: quizJa !== "" ? Number(quizJa) : null,
+      mathScore: quizMath !== "" ? Number(quizMath) : null,
+      scienceScore: quizSci !== "" ? Number(quizSci) : null,
+      socialScore: quizSoc !== "" ? Number(quizSoc) : null,
+      maxScore: quizMax !== "" ? Number(quizMax) : null,
+    });
+    if (!res.ok) { setQuizMsg(res.error); return; }
+    const newQuiz: WeeklyQuizDTO = {
+      id: res.id, quiz_date: quizDate,
+      japanese_score: quizJa !== "" ? Number(quizJa) : null,
+      math_score: quizMath !== "" ? Number(quizMath) : null,
+      science_score: quizSci !== "" ? Number(quizSci) : null,
+      social_score: quizSoc !== "" ? Number(quizSoc) : null,
+      max_score: quizMax !== "" ? Number(quizMax) : null,
+    };
+    setQuizzes((prev) => {
+      const filtered = prev.filter((q) => q.quiz_date !== quizDate);
+      return [...filtered, newQuiz].sort((a, b) => a.quiz_date.localeCompare(b.quiz_date));
+    });
+    setQuizMsg("保存しました！");
+    setTimeout(() => setQuizMsg(null), 2000);
+  };
+
+  const deleteQuiz = async (id: string) => {
+    if (!confirm("この記録を削除しますか？")) return;
+    const res = await deleteWeeklyQuizAction(id);
+    if (!res.ok) return;
+    setQuizzes((prev) => prev.filter((q) => q.id !== id));
+  };
+
+  const weeklyTrendData = useMemo(() => quizzes.map((q) => ({
+    date: q.quiz_date.slice(5),
+    国語: q.japanese_score,
+    算数: q.math_score,
+    理科: q.science_score,
+    社会: q.social_score,
+  })), [quizzes]);
+
   const selectedReport = reports.find((r) => r.id === selectedId);
   const weakSelectedReport = reports.find((r) => r.id === weakSelectedId);
 
   const TABS: { key: Tab; label: string }[] = [
+    { key: "weekly", label: "📋 小テスト" },
     { key: "input", label: "📝 記録する" },
     { key: "trend", label: "📈 推移" },
     { key: "units", label: "🔬 単元推移" },
@@ -1016,6 +1074,126 @@ export function TestsClient({
               )}
             </>
           )}
+        </section>
+      )}
+      {/* 📋 小テストタブ */}
+      {tab === "weekly" && (
+        <section className="space-y-4">
+          {/* 入力フォーム */}
+          <div className="rounded-2xl border-2 border-sky-200 bg-white p-4 shadow-sm">
+            <p className="mb-3 text-sm font-bold text-sky-700">📋 小テスト記録</p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="w-10 text-xs font-bold text-slate-600">日付</label>
+                <input
+                  type="date"
+                  value={quizDate}
+                  onChange={(e) => setQuizDate(e.target.value)}
+                  className="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { label: "国語", val: quizJa, set: setQuizJa },
+                  { label: "算数", val: quizMath, set: setQuizMath },
+                  { label: "理科", val: quizSci, set: setQuizSci },
+                  { label: "社会", val: quizSoc, set: setQuizSoc },
+                ] as { label: string; val: string; set: (v: string) => void }[]).map(({ label, val, set }) => (
+                  <div key={label} className="flex items-center gap-2">
+                    <label className="w-8 text-xs font-bold text-slate-600">{label}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={val}
+                      onChange={(e) => set(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      placeholder="点"
+                      className="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-2 text-sm font-semibold text-sky-900"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="w-10 text-xs font-bold text-slate-600">満点</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={quizMax}
+                  onChange={(e) => setQuizMax(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="省略可"
+                  className="w-28 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900"
+                />
+              </div>
+            </div>
+            {quizMsg && (
+              <p className="mt-2 text-sm font-bold text-emerald-600">✅ {quizMsg}</p>
+            )}
+            <button
+              type="button"
+              onClick={saveQuiz}
+              className="mt-3 w-full rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 py-3 font-bold text-white shadow-md"
+            >
+              💾 保存する
+            </button>
+          </div>
+
+          {/* 点数推移グラフ */}
+          {quizzes.length >= 2 && (
+            <div className="rounded-2xl border border-sky-200 bg-white p-3 shadow-sm">
+              <p className="mb-2 text-xs font-bold text-sky-700">📈 点数推移</p>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={weeklyTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#bae6fd" />
+                    <XAxis dataKey="date" tick={{ fill: "#0369a1", fontSize: 10 }} />
+                    <YAxis tick={{ fill: "#0369a1", fontSize: 10 }} />
+                    <Tooltip contentStyle={{ background: "#f0f9ff", border: "1px solid #7dd3fc" }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="国語" stroke="#e879f9" strokeWidth={2} dot={{ r: 4, fill: "#e879f9" }} connectNulls={false} />
+                    <Line type="monotone" dataKey="算数" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4, fill: "#3b82f6" }} connectNulls={false} />
+                    <Line type="monotone" dataKey="理科" stroke="#22c55e" strokeWidth={2} dot={{ r: 4, fill: "#22c55e" }} connectNulls={false} />
+                    <Line type="monotone" dataKey="社会" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: "#f59e0b" }} connectNulls={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* 過去の記録一覧 */}
+          <div className="space-y-2">
+            {[...quizzes].reverse().map((q) => (
+              <div key={q.id} className="rounded-xl border border-sky-100 bg-white p-3 shadow-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-bold text-sky-700">{q.quiz_date}</p>
+                  <button
+                    type="button"
+                    onClick={() => deleteQuiz(q.id)}
+                    className="text-[10px] font-bold text-rose-400 hover:text-rose-600"
+                  >
+                    削除
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { label: "国語", score: q.japanese_score },
+                    { label: "算数", score: q.math_score },
+                    { label: "理科", score: q.science_score },
+                    { label: "社会", score: q.social_score },
+                  ] as { label: string; score: number | null }[])
+                    .filter((s) => s.score != null)
+                    .map(({ label, score }) => (
+                      <span key={label} className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-800">
+                        {label} {score}{q.max_score != null ? `/${q.max_score}` : "点"}
+                      </span>
+                    ))}
+                </div>
+              </div>
+            ))}
+            {quizzes.length === 0 && (
+              <p className="text-center text-sm text-slate-400">まだ記録がありません</p>
+            )}
+          </div>
         </section>
       )}
     </main>
