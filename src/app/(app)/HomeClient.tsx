@@ -420,8 +420,9 @@ export function HomeClient({
               )}
             </div>
 
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <div className="flex flex-wrap justify-end gap-2">
+            <div className="shrink-0">
+              {/* 横スクロールなし。2列グリッド（下段右にコメント）で高さを抑える */}
+              <div className="grid grid-cols-2 gap-2 justify-items-end pb-1 w-auto">
                 <button
                   type="button"
                   onClick={() => activeTopic && toggleLike(activeTopic.id)}
@@ -429,10 +430,13 @@ export function HomeClient({
                     activeTopic && interactions.likes[activeTopic.id]
                       ? "bg-fuchsia-600 text-white"
                       : "bg-white text-fuchsia-700 hover:bg-fuchsia-50 border border-fuchsia-200"
-                  }`}
+                  } whitespace-nowrap`}
                   aria-label="いいね"
                 >
-                  👍 {activeTopic && interactions.likes[activeTopic.id] ? 1 : 0}
+                  👍
+                  <span className="hidden sm:inline">
+                    {activeTopic && interactions.likes[activeTopic.id] ? 1 : 0}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -441,10 +445,13 @@ export function HomeClient({
                     activeTopic && interactions.sparks[activeTopic.id]
                       ? "bg-amber-500 text-amber-950"
                       : "bg-white text-amber-600 hover:bg-amber-50 border border-amber-200"
-                  }`}
+                  } whitespace-nowrap`}
                   aria-label="応援スタンプ"
                 >
-                  ✨ {activeTopic && interactions.sparks[activeTopic.id] ? 1 : 0}
+                  ✨
+                  <span className="hidden sm:inline">
+                    {activeTopic && interactions.sparks[activeTopic.id] ? 1 : 0}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -453,10 +460,13 @@ export function HomeClient({
                     activeTopic && interactions.cheers[activeTopic.id]
                       ? "bg-emerald-600 text-white"
                       : "bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200"
-                  }`}
+                  } whitespace-nowrap`}
                   aria-label="がんばれ"
                 >
-                  💪 {activeTopic && interactions.cheers[activeTopic.id] ? 1 : 0}
+                  💪
+                  <span className="hidden sm:inline">
+                    {activeTopic && interactions.cheers[activeTopic.id] ? 1 : 0}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -465,10 +475,13 @@ export function HomeClient({
                     activeTopic && interactions.focuses[activeTopic.id]
                       ? "bg-sky-700 text-white"
                       : "bg-white text-sky-700 hover:bg-sky-50 border border-sky-200"
-                  }`}
+                  } whitespace-nowrap`}
                   aria-label="集中"
                 >
-                  🎯 {activeTopic && interactions.focuses[activeTopic.id] ? 1 : 0}
+                  🎯
+                  <span className="hidden sm:inline">
+                    {activeTopic && interactions.focuses[activeTopic.id] ? 1 : 0}
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -477,26 +490,30 @@ export function HomeClient({
                     activeTopic && interactions.stars[activeTopic.id]
                       ? "bg-rose-600 text-white"
                       : "bg-white text-rose-700 hover:bg-rose-50 border border-rose-200"
-                  }`}
+                  } whitespace-nowrap`}
                   aria-label="ナイス"
                 >
-                  🌟 {activeTopic && interactions.stars[activeTopic.id] ? 1 : 0}
+                  🌟
+                  <span className="hidden sm:inline">
+                    {activeTopic && interactions.stars[activeTopic.id] ? 1 : 0}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!activeTopic) return;
+                    setCommentOpenTopicId((cur) => (cur === activeTopic.id ? null : activeTopic.id));
+                    setCommentDraft("");
+                    // 次の render 後にフォーカスする
+                    window.setTimeout(() => commentDraftRef.current?.focus(), 50);
+                  }}
+                  className="rounded-full border border-fuchsia-200 bg-white px-2 py-1 text-xs font-bold text-fuchsia-700 hover:bg-fuchsia-50 whitespace-nowrap"
+                  aria-label="コメント"
+                >
+                  💬
+                  <span className="hidden sm:inline">{activeComments.length}</span>
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!activeTopic) return;
-                  setCommentOpenTopicId((cur) => (cur === activeTopic.id ? null : activeTopic.id));
-                  setCommentDraft("");
-                  // 次の render 後にフォーカスする
-                  window.setTimeout(() => commentDraftRef.current?.focus(), 50);
-                }}
-                className="rounded-full border border-fuchsia-200 bg-white px-2 py-1 text-xs font-bold text-fuchsia-700 hover:bg-fuchsia-50"
-              >
-                💬 {activeComments.length}
-              </button>
             </div>
           </div>
 
