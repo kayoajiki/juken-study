@@ -421,11 +421,15 @@ export function StudyClient({
     setEarnedPoints(null);
     const manualMin = Math.min(180, Math.max(1, parseInt(manualMinStr, 10) || 0));
     if (manualMin <= 0) { setMessage("1分以上を入力してください"); return; }
-    const res = await subtractStudyMinutesAction({ minutes: manualMin, subject, kind });
-    if (res.ok) {
-      setMessage(`${res.subtracted}分 を記録から減らしました`);
-    } else {
-      setMessage(res.error);
+    try {
+      const res = await subtractStudyMinutesAction({ minutes: manualMin, subject, kind });
+      if (res.ok) {
+        setMessage(`${res.subtracted}分 を記録から減らしました`);
+      } else {
+        setMessage(res.error);
+      }
+    } catch (e) {
+      setMessage(`エラー: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
