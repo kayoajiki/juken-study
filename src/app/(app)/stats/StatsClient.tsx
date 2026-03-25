@@ -304,7 +304,8 @@ export function StatsClient({
               <button
                 type="button"
                 onClick={() => setConfirmTarget(null)}
-                className="flex-1 rounded-xl border-2 border-emerald-300 bg-emerald-50 py-3 font-bold text-emerald-700"
+                disabled={deleting}
+                className="flex-1 rounded-xl border-2 border-emerald-300 bg-emerald-50 py-3 font-bold text-emerald-700 disabled:opacity-50"
               >
                 やっぱりやめる
               </button>
@@ -438,7 +439,12 @@ export function StatsClient({
           <div className="rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm">
             <p className="mb-2 text-xs font-bold text-slate-500">📋 最近の記録</p>
             {sessions.length === 0 ? (
-              <p className="text-center text-sm text-slate-400">記録がありません</p>
+              <div className="py-4 text-center">
+                <p className="text-sm text-slate-400">まだ記録がありません</p>
+                <a href="/study" className="mt-2 inline-block text-sm font-bold text-fuchsia-600 underline">
+                  勉強を記録する →
+                </a>
+              </div>
             ) : (
               <ul className="space-y-2">
                 {recentSessionsReversed.map((s) => {

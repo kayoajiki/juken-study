@@ -100,6 +100,14 @@ export function StudyClient({
   const breakTotalSecRef = useRef<number>(0);
 
   const [message, setMessage] = useState<string | null>(null);
+  const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showMessage = (text: string | null) => {
+    showMessage(text);
+    if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
+    if (text !== null) {
+      msgTimerRef.current = setTimeout(() => showMessage(null), 4000);
+    }
+  };
   const [earnedPoints, setEarnedPoints] = useState<number | null>(null);
   const [restored, setRestored] = useState(false);
   const [celebration, setCelebration] = useState<{
@@ -247,7 +255,7 @@ export function StudyClient({
   };
 
   const start = () => {
-    setMessage(null);
+    showMessage(null);
     setEarnedPoints(null);
     setRestored(false);
     setBreakCountdown(null);
@@ -336,10 +344,10 @@ export function StudyClient({
       if (rankUp || res.newBadges.length > 0) {
         setCelebration({ awarded: res.awarded, newBadges: res.newBadges, rankUp });
       }
-      setMessage(`${totalMin}分 を記録しました！`);
+      showMessage(`${totalMin}分 を記録しました！`);
       setEarnedPoints(res.awarded);
     } else {
-      setMessage(res.error);
+      showMessage(res.error);
     }
   };
 
@@ -347,10 +355,10 @@ export function StudyClient({
   const [timerAdjMinStr, setTimerAdjMinStr] = useState("0");
 
   const addManual = async () => {
-    setMessage(null);
+    showMessage(null);
     setEarnedPoints(null);
     const manualMin = Math.min(180, Math.max(1, parseInt(manualMinStr, 10) || 0));
-    if (manualMin <= 0) { setMessage("1分以上を入力してください"); return; }
+    if (manualMin <= 0) { showMessage("1分以上を入力してください"); return; }
     const end = new Date();
     const startD = new Date(end.getTime() - manualMin * 60_000);
     const res = await recordStudySessionAction({
@@ -365,18 +373,18 @@ export function StudyClient({
       if (rankUp || res.newBadges.length > 0) {
         setCelebration({ awarded: res.awarded, newBadges: res.newBadges, rankUp });
       }
-      setMessage(`${manualMin}分 を追加しました！`);
+      showMessage(`${manualMin}分 を追加しました！`);
       setEarnedPoints(res.awarded);
     } else {
-      setMessage(res.error);
+      showMessage(res.error);
     }
   };
 
   const addToTimer = () => {
-    setMessage(null);
+    showMessage(null);
     setEarnedPoints(null);
     const timerAdjMin = Math.min(180, Math.max(1, parseInt(timerAdjMinStr, 10) || 0));
-    if (timerAdjMin <= 0) { setMessage("1分以上を入力してください"); return; }
+    if (timerAdjMin <= 0) { showMessage("1分以上を入力してください"); return; }
     let base = accumulatedSec;
     if (running && startedAtRef.current) {
       base += Math.floor((Date.now() - startedAtRef.current.getTime()) / 1000);
@@ -391,14 +399,14 @@ export function StudyClient({
       subject,
       kind,
     });
-    setMessage(`タイマーに ${timerAdjMin}分 を追加しました`);
+    showMessage(`タイマーに ${timerAdjMin}分 を追加しました`);
   };
 
   const subtractFromTimer = () => {
-    setMessage(null);
+    showMessage(null);
     setEarnedPoints(null);
     const timerAdjMin = Math.min(180, Math.max(1, parseInt(timerAdjMinStr, 10) || 0));
-    if (timerAdjMin <= 0) { setMessage("1分以上を入力してください"); return; }
+    if (timerAdjMin <= 0) { showMessage("1分以上を入力してください"); return; }
     let base = accumulatedSec;
     if (running && startedAtRef.current) {
       base += Math.floor((Date.now() - startedAtRef.current.getTime()) / 1000);
@@ -413,23 +421,23 @@ export function StudyClient({
       subject,
       kind,
     });
-    setMessage(`タイマーから ${timerAdjMin}分 を減らしました`);
+    showMessage(`タイマーから ${timerAdjMin}分 を減らしました`);
   };
 
   const subtractManual = async () => {
-    setMessage(null);
+    showMessage(null);
     setEarnedPoints(null);
     const manualMin = Math.min(180, Math.max(1, parseInt(manualMinStr, 10) || 0));
-    if (manualMin <= 0) { setMessage("1分以上を入力してください"); return; }
+    if (manualMin <= 0) { showMessage("1分以上を入力してください"); return; }
     try {
       const res = await subtractStudyMinutesAction({ minutes: manualMin, subject, kind });
       if (res.ok) {
-        setMessage(`${res.subtracted}分 を記録から減らしました`);
+        showMessage(`${res.subtracted}分 を記録から減らしました`);
       } else {
-        setMessage(res.error);
+        showMessage(res.error);
       }
     } catch (e) {
-      setMessage(`エラー: ${e instanceof Error ? e.message : String(e)}`);
+      showMessage(`エラー: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 

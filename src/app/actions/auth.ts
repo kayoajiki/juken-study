@@ -19,8 +19,10 @@ export async function signInAction(
     .where(eq(users.email, email.trim().toLowerCase()))
     .limit(1);
   const u = row[0];
+  // ユーザーが存在しない場合もダミー比較を実行してタイミング攻撃を防ぐ
+  const hash = u?.passwordHash ?? "$2b$10$dummyhashfortimingprotectiononly";
+  const ok = await bcrypt.compare(password, hash);
   if (!u) return { ok: false, error: "メールまたはパスワードが違います" };
-  const ok = await bcrypt.compare(password, u.passwordHash);
   if (!ok) return { ok: false, error: "メールまたはパスワードが違います" };
   await setSessionCookie(u.id);
   return { ok: true };
@@ -31,6 +33,9 @@ export async function signUpAction(
   password: string,
   displayName: string
 ): Promise<ActionResult> {
+  if (password.length < 8) {
+    return { ok: false, error: "パスワードは8文字以上で設定してください" };
+  }
   const db = getDb();
   const em = email.trim().toLowerCase();
   const existing = await db

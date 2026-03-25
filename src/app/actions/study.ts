@@ -23,13 +23,32 @@ export async function recordStudySessionAction(input: {
 > {
   const userId = await getSessionUserId();
   if (!userId) return { ok: false, error: "ログインが必要です" };
+
+  // 入力値の基本バリデーション
+  if (!Number.isFinite(input.minutes) || input.minutes < 1 || input.minutes > 600) {
+    return { ok: false, error: "分数が不正です（1〜600分）" };
+  }
+  const startedAt = new Date(input.startedAtIso);
+  const endedAt = new Date(input.endedAtIso);
+  if (isNaN(startedAt.getTime()) || isNaN(endedAt.getTime())) {
+    return { ok: false, error: "日時が不正です" };
+  }
+  if (endedAt <= startedAt) {
+    return { ok: false, error: "終了時刻は開始時刻より後である必要があります" };
+  }
+  const now = Date.now();
+  const oneYearMs = 365 * 24 * 60 * 60 * 1000;
+  if (startedAt.getTime() < now - oneYearMs || endedAt.getTime() > now + 60_000) {
+    return { ok: false, error: "日時が範囲外です" };
+  }
+
   try {
     const { awarded, newBadges, prevRank, newRank } = await recordStudySessionDb(getDb(), userId, {
       subject: input.subject,
       kind: input.kind,
       minutes: input.minutes,
-      startedAt: new Date(input.startedAtIso),
-      endedAt: new Date(input.endedAtIso),
+      startedAt,
+      endedAt,
     });
     return { ok: true, awarded, newBadges, prevRank, newRank };
   } catch (e) {
