@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, studySessions, users } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
@@ -179,5 +180,6 @@ export async function subtractStudyMinutesAction(input: {
     }).where(eq(users.id, userId));
   }
 
+  revalidatePath("/");
   return { ok: true, subtracted };
 }
