@@ -22,18 +22,14 @@ type Profile = {
   self_study_streak: number;
 };
 
-type Row = { kind: string; minutes: number; subject: string };
-
 export function HomeClient({
   profile,
-  sessions,
   nextScheduleHint,
   todayActualMin,
   todayTargetMin,
   recentBadges,
 }: {
   profile: Profile | null;
-  sessions: Row[];
   nextScheduleHint: string | null;
   todayActualMin: number;
   todayTargetMin: number;
@@ -119,9 +115,6 @@ export function HomeClient({
       // ignore
     }
   }, [rank.id, rank.name]);
-
-  // sessions is kept for potential future use
-  void sessions;
 
   const todayYmd = tokyoYmd();
 

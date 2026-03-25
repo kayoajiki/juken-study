@@ -22,15 +22,6 @@ export default async function HomePage() {
   const profile = urow[0];
   if (!profile) return null;
 
-  const sessions = await db
-    .select({
-      kind: studySessions.kind,
-      minutes: studySessions.minutes,
-      subject: studySessions.subject,
-    })
-    .from(studySessions)
-    .where(eq(studySessions.userId, userId));
-
   const schRows = await db
     .select()
     .from(schedules)
@@ -62,11 +53,6 @@ export default async function HomePage() {
         last_study_local_date: profile.lastStudyLocalDate,
         self_study_streak: profile.selfStudyStreak ?? 0,
       }}
-      sessions={sessions.map((s) => ({
-        kind: s.kind,
-        minutes: s.minutes,
-        subject: s.subject,
-      }))}
       nextScheduleHint={hint}
       todayActualMin={todayActualMin}
       todayTargetMin={todayTargetMin}

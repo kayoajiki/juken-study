@@ -75,6 +75,8 @@ export function StatsClient({
   const [tab, setTab] = useState<Tab>("graph");
   const [sessions, setSessions] = useState<Row[]>(initialSessions);
 
+  const recentSessionsReversed = useMemo(() => sessions.slice().reverse().slice(0, 20), [sessions]);
+
   // 削除確認モーダル
   const [confirmTarget, setConfirmTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -439,7 +441,7 @@ export function StatsClient({
               <p className="text-center text-sm text-slate-400">記録がありません</p>
             ) : (
               <ul className="space-y-2">
-                {sessions.slice().reverse().slice(0, 20).map((s) => {
+                {recentSessionsReversed.map((s) => {
                   const sub = subjectById(s.subject);
                   return (
                     <li

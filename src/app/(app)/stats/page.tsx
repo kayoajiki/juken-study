@@ -20,7 +20,8 @@ export default async function StatsPage() {
     })
     .from(studySessions)
     .where(eq(studySessions.userId, userId))
-    .orderBy(desc(studySessions.startedAt));
+    .orderBy(desc(studySessions.startedAt))
+    .limit(300);
 
   const urow = await db.select({
     dailyGoalMinutes: users.dailyGoalMinutes,
