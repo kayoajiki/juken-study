@@ -257,11 +257,14 @@ export function HomeClient({
       createdAt: Date.now(),
     };
     setInteractions((prev) => {
+      const prevList = prev.comments[topicId] ?? [];
+      // コメントは常に最大3つまで（新しいものを追加して、あふれたら古いものを削除）
+      const nextList = [...prevList, c].slice(-3);
       const next: TopicInteractions = {
         ...prev,
         comments: {
           ...prev.comments,
-          [topicId]: [...(prev.comments[topicId] ?? []), c],
+          [topicId]: nextList,
         },
       };
       persistInteractions(next);
@@ -514,6 +517,22 @@ export function HomeClient({
                   <span className="hidden sm:inline">{activeComments.length}</span>
                 </button>
               </div>
+
+              {/* コメントは入力済みのものがある限り、常に表示する */}
+              {activeComments.length > 0 && (
+                <div className="mt-2 max-w-[190px] text-right">
+                  <div className="space-y-1">
+                    {activeComments.slice(-3).map((c) => (
+                      <p
+                        key={c.id}
+                        className="text-[11px] font-bold text-slate-700 break-words leading-tight"
+                      >
+                        {c.text}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -541,16 +560,6 @@ export function HomeClient({
                   送信
                 </button>
               </form>
-
-              {activeComments.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {activeComments.slice(-2).map((c) => (
-                    <p key={c.id} className="text-[11px] font-bold text-slate-700">
-                      {c.text}
-                    </p>
-                  ))}
-                </div>
-              )}
               <div className="mt-2 text-[10px] font-bold text-slate-400">※ 一言コメント</div>
             </div>
           )}
