@@ -6,7 +6,7 @@ loadEnvConfig(process.cwd());
 export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./drizzle",
-  dialect: "sqlite",
+  dialect: "turso",
   dbCredentials: {
     url: process.env.TURSO_DATABASE_URL ?? "file:./local-dev.db",
     ...(process.env.TURSO_AUTH_TOKEN

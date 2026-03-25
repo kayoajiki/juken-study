@@ -50,3 +50,11 @@ body {
 .bg-clip-text.text-transparent {
   color: transparent !important;
 }
+
+/* スクロールバー非表示 */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

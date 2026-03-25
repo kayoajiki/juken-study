@@ -486,13 +486,13 @@ export function TestsClient({
       <h1 className="text-xl font-bold text-violet-950">📝 テスト結果</h1>
 
       {/* タブ */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            className={`flex-1 rounded-full py-2 text-xs font-bold transition-all ${
+            className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition-all ${
               tab === t.key
                 ? "bg-gradient-to-r from-fuchsia-500 to-violet-600 text-white shadow-md"
                 : "border-2 border-fuchsia-200 bg-fuchsia-50 text-fuchsia-600"
@@ -1092,15 +1092,15 @@ export function TestsClient({
                   className="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {([
                   { label: "国語", val: quizJa, set: setQuizJa },
                   { label: "算数", val: quizMath, set: setQuizMath },
                   { label: "理科", val: quizSci, set: setQuizSci },
                   { label: "社会", val: quizSoc, set: setQuizSoc },
                 ] as { label: string; val: string; set: (v: string) => void }[]).map(({ label, val, set }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <label className="w-8 text-xs font-bold text-slate-600">{label}</label>
+                  <div key={label} className="flex items-center gap-2 min-w-0">
+                    <label className="w-8 shrink-0 text-xs font-bold text-slate-600">{label}</label>
                     <input
                       type="number"
                       min={0}
@@ -1108,7 +1108,7 @@ export function TestsClient({
                       onChange={(e) => set(e.target.value)}
                       onFocus={(e) => e.target.select()}
                       placeholder="点"
-                      className="flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-2 text-sm font-semibold text-sky-900"
+                      className="min-w-0 flex-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-2 text-sm font-semibold text-sky-900"
                     />
                   </div>
                 ))}
