@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb, studySessions, users } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
 import { recordStudySessionDb } from "@/lib/record-session";
@@ -124,4 +124,60 @@ export async function deleteStudySessionAction(
   }).where(eq(users.id, userId));
 
   return { ok: true };
+}
+
+/**
+ * 指定分数を記録から差し引く（直近のセッションから順に削除・縮小）
+ */
+export async function subtractStudyMinutesAction(input: {
+  minutes: number;
+  subject: SubjectId;
+  kind: "homework" | "self_study";
+}): Promise<{ ok: true; subtracted: number } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "ログインが必要です" };
+
+  const db = getDb();
+  let remaining = input.minutes;
+
+  // 同じ教科・種類の直近セッションから順に引いていく
+  const sessions = await db
+    .select({ id: studySessions.id, minutes: studySessions.minutes })
+    .from(studySessions)
+    .where(and(
+      eq(studySessions.userId, userId),
+      eq(studySessions.subject, input.subject),
+      eq(studySessions.kind, input.kind),
+    ))
+    .orderBy(desc(studySessions.startedAt));
+
+  for (const session of sessions) {
+    if (remaining <= 0) break;
+    if (session.minutes <= remaining) {
+      // セッション全体を削除
+      await db.delete(studySessions).where(eq(studySessions.id, session.id));
+      remaining -= session.minutes;
+    } else {
+      // セッションの一部だけ削除（残りを更新）
+      await db.update(studySessions)
+        .set({ minutes: session.minutes - remaining })
+        .where(eq(studySessions.id, session.id));
+      remaining = 0;
+    }
+  }
+
+  const subtracted = input.minutes - remaining;
+  if (subtracted === 0) return { ok: false, error: "該当する記録がありません" };
+
+  // ユーザーの合計分数を更新
+  const [profile] = await db.select({ totalStudyMinutes: users.totalStudyMinutes })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  if (profile) {
+    await db.update(users).set({
+      totalStudyMinutes: Math.max(0, profile.totalStudyMinutes - subtracted),
+      updatedAt: new Date().toISOString(),
+    }).where(eq(users.id, userId));
+  }
+
+  return { ok: true, subtracted };
 }

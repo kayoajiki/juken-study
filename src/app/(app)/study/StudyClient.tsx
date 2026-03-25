@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { recordStudySessionAction } from "@/app/actions/study";
+import { recordStudySessionAction, subtractStudyMinutesAction } from "@/app/actions/study";
 import { SUBJECTS, type SubjectId } from "@/lib/subjects";
 
 type Kind = "homework" | "self_study";
@@ -416,28 +416,17 @@ export function StudyClient({
     setMessage(`タイマーから ${timerAdjMin}分 を減らしました`);
   };
 
-  const subtractManual = () => {
+  const subtractManual = async () => {
     setMessage(null);
     setEarnedPoints(null);
     const manualMin = Math.min(180, Math.max(1, parseInt(manualMinStr, 10) || 0));
     if (manualMin <= 0) { setMessage("1分以上を入力してください"); return; }
-    // 進行中セグメント分を一旦 accumulated に取り込んでから減算
-    let base = accumulatedSec;
-    if (running && startedAtRef.current) {
-      base += Math.floor((Date.now() - startedAtRef.current.getTime()) / 1000);
-      setStartedAt(new Date()); // セグメントをリセット
+    const res = await subtractStudyMinutesAction({ minutes: manualMin, subject, kind });
+    if (res.ok) {
+      setMessage(`${res.subtracted}分 を記録から減らしました`);
+    } else {
+      setMessage(res.error);
     }
-    const newAcc = Math.max(0, base - manualMin * 60);
-    setAccumulatedSec(newAcc);
-    setElapsed(newAcc);
-    // running なら startedAt を今にリセット済みなので保存
-    saveToStorage({
-      startedAt: running ? new Date().toISOString() : null,
-      accumulatedSec: newAcc,
-      subject,
-      kind,
-    });
-    setMessage(`${manualMin}分 を減らしました`);
   };
 
   const subStyle = SUBJECTS.find((s) => s.id === subject);
@@ -635,10 +624,7 @@ export function StudyClient({
           </button>
         </div>
         <p className="mt-1.5 text-xs text-slate-400">
-          「足す」は勉強時間の記録にそのまま保存されます
-        </p>
-        <p className="text-xs text-slate-400">
-          「減らす」は現在のタイマーから分数を引きます
+          「足す」は記録に直接保存、「減らす」は保存済みの記録から直接引きます
         </p>
       </section>
 
