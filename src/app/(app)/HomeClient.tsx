@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Flame, BookOpen, Trophy } from "lucide-react";
-import { rankForPoints } from "@/lib/points-rank";
+import { rankForPoints, RANKS } from "@/lib/points-rank";
 import type { EarnedBadge } from "@/lib/badges";
+import { tokyoYmd } from "@/lib/tokyo-date";
 
 type Profile = {
   display_name: string | null;
@@ -38,8 +40,191 @@ export function HomeClient({
     ? Math.min(100, Math.round((todayActualMin / todayTargetMin) * 100))
     : 0;
 
+  type Topic = {
+    id: string;
+    text: string;
+  };
+
+  const [rankUpTopic, setRankUpTopic] = useState<Topic | null>(null);
+
+  type TopicComment = {
+    id: string;
+    text: string;
+    createdAt: number; // epoch ms
+  };
+
+  type TopicInteractions = {
+    likes: Record<string, boolean>;
+    sparks: Record<string, boolean>; // "応援"スタンプ
+    comments: Record<string, TopicComment[]>;
+  };
+
+  const topics = useMemo<Topic[]>(() => {
+    const out: Topic[] = [];
+
+    if (rankUpTopic) out.push(rankUpTopic);
+
+    if (todayTargetMin > 0) {
+      const remain = Math.max(0, todayTargetMin - todayActualMin);
+      if (todayPct >= 100) out.push({ id: "goal_done", text: "🎉 今日の目標達成！すごい！" });
+      else if (todayActualMin > 0) out.push({ id: "goal_remain", text: `あと ${remain}分！がんばれ！` });
+      else out.push({ id: "goal_start", text: "さあ今日もはじめよう！" });
+    } else {
+      out.push({ id: "goal_not_set", text: "📅 今日の目標がまだ設定されていません" });
+    }
+
+    if (nextScheduleHint) {
+      out.push({ id: "next_schedule", text: `📅 次の予定：${nextScheduleHint}` });
+    }
+
+    if (streak > 0) {
+      out.push({ id: "streak", text: `🔥 連続 ${streak}日！明日も続けよう！` });
+    }
+
+    if (selfStudyStreak > 0) {
+      out.push({ id: "self_streak", text: `✨ 自主学習 ${selfStudyStreak}日！` });
+    }
+
+    // トピックが多い場合は絞る（UIの高さを固定したい）
+    return out.slice(0, 4);
+  }, [nextScheduleHint, rankUpTopic, selfStudyStreak, streak, todayActualMin, todayPct, todayTargetMin]);
+
+  useEffect(() => {
+    // 前回のランクと比べて、変化があれば「ランクアップ」を1回だけ出す
+    const key = "home_rank_prev";
+    try {
+      const raw = localStorage.getItem(key);
+      const prevRankId = raw ? (JSON.parse(raw)?.rankId as string | undefined) : undefined;
+
+      if (prevRankId && prevRankId !== rank.id) {
+        const from = RANKS.find((r) => r.id === prevRankId);
+        setRankUpTopic({
+          id: `rank_up_${prevRankId}_${rank.id}`,
+          text: `🏆 ランクアップ！${from?.name ?? prevRankId} → ${rank.name}`,
+        });
+      } else {
+        setRankUpTopic(null);
+      }
+
+      localStorage.setItem(key, JSON.stringify({ rankId: rank.id, updatedAt: Date.now() }));
+    } catch {
+      // ignore
+    }
+  }, [rank.id, rank.name]);
+
   // sessions is kept for potential future use
   void sessions;
+
+  const todayYmd = tokyoYmd();
+  const interactionsKey = `home_daily_topics_interactions_${todayYmd}`;
+
+  const [topicIndex, setTopicIndex] = useState(0);
+  const [topicSlideKey, setTopicSlideKey] = useState(0);
+
+  const [interactions, setInteractions] = useState<TopicInteractions>({
+    likes: {},
+    sparks: {},
+    comments: {},
+  });
+
+  const [commentOpenTopicId, setCommentOpenTopicId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
+  const commentDraftRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    // ローカルにスタンプ/コメントを保存（サーバ永続は次フェーズ）
+    try {
+      const raw = localStorage.getItem(interactionsKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as TopicInteractions;
+      setInteractions({
+        likes: parsed.likes ?? {},
+        sparks: parsed.sparks ?? {},
+        comments: parsed.comments ?? {},
+      });
+    } catch {
+      // ignore
+    }
+  }, [interactionsKey]);
+
+  const persistInteractions = (next: TopicInteractions) => {
+    try {
+      localStorage.setItem(interactionsKey, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (topics.length <= 1) return;
+    const t = window.setInterval(() => {
+      setTopicIndex((i) => (i + 1) % topics.length);
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [topics.length]);
+
+  useEffect(() => {
+    // トピック数が変わってもスライド位置がはみ出さないようにする
+    setTopicIndex((i) => Math.min(i, Math.max(0, topics.length - 1)));
+  }, [topics.length]);
+
+  useEffect(() => {
+    setTopicSlideKey((k) => k + 1);
+    // トピックが切り替わったらコメント欄は閉じる（レイアウトを安定させる）
+    setCommentOpenTopicId((cur) => {
+      const nextId = topics[topicIndex]?.id;
+      return cur && cur !== nextId ? null : cur;
+    });
+    setCommentDraft("");
+  }, [topicIndex, topics]);
+
+  const activeTopic = topics[topicIndex] ?? null;
+  const activeComments = activeTopic ? interactions.comments[activeTopic.id] ?? [] : [];
+
+  const toggleLike = (topicId: string) => {
+    setInteractions((prev) => {
+      const next: TopicInteractions = {
+        ...prev,
+        likes: { ...prev.likes, [topicId]: !prev.likes[topicId] },
+      };
+      persistInteractions(next);
+      return next;
+    });
+  };
+
+  const toggleSpark = (topicId: string) => {
+    setInteractions((prev) => {
+      const next: TopicInteractions = {
+        ...prev,
+        sparks: { ...prev.sparks, [topicId]: !prev.sparks[topicId] },
+      };
+      persistInteractions(next);
+      return next;
+    });
+  };
+
+  const submitComment = (topicId: string) => {
+    const text = commentDraft.trim();
+    if (!text) return;
+    const c: TopicComment = {
+      id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      text: text.slice(0, 48), // "一言" 前提
+      createdAt: Date.now(),
+    };
+    setInteractions((prev) => {
+      const next: TopicInteractions = {
+        ...prev,
+        comments: {
+          ...prev.comments,
+          [topicId]: [...(prev.comments[topicId] ?? []), c],
+        },
+      };
+      persistInteractions(next);
+      return next;
+    });
+    setCommentDraft("");
+    setCommentOpenTopicId(null);
+  };
 
   return (
     <main className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8">
@@ -155,6 +340,124 @@ export function HomeClient({
           📣 今日はまだ勉強してないよ！一緒にやってみよう💪
         </p>
       )}
+
+      {/* 今日のトピックス（スライド） */}
+      <section className="relative rounded-2xl border-2 border-fuchsia-200 bg-white p-4 shadow-sm">
+        <style>{`
+          @keyframes topicSlideIn {
+            from { transform: translateY(6px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+          .topic-slide-in { animation: topicSlideIn 320ms ease-out both; }
+        `}</style>
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-fuchsia-700">🗓 今日のトピックス</p>
+          {topics.length > 1 ? (
+            <p className="text-[10px] font-bold text-slate-400">
+              {topicIndex + 1}/{topics.length}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="relative mt-3 rounded-xl border border-fuchsia-100 bg-fuchsia-50 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              {activeTopic ? (
+                <p
+                  key={`${activeTopic.id}_${topicSlideKey}`}
+                  className="topic-slide-in text-sm font-bold text-fuchsia-900"
+                >
+                  {activeTopic.text}
+                </p>
+              ) : (
+                <p className="text-sm font-bold text-fuchsia-900">今日のトピックスはありません</p>
+              )}
+            </div>
+
+            <div className="flex flex-col items-end gap-2 shrink-0">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => activeTopic && toggleLike(activeTopic.id)}
+                  className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
+                    activeTopic && interactions.likes[activeTopic.id]
+                      ? "bg-fuchsia-600 text-white"
+                      : "bg-white text-fuchsia-700 hover:bg-fuchsia-50 border border-fuchsia-200"
+                  }`}
+                  aria-label="いいね"
+                >
+                  👍 {activeTopic && interactions.likes[activeTopic.id] ? 1 : 0}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => activeTopic && toggleSpark(activeTopic.id)}
+                  className={`rounded-full px-2 py-1 text-xs font-bold shadow-sm ${
+                    activeTopic && interactions.sparks[activeTopic.id]
+                      ? "bg-amber-500 text-amber-950"
+                      : "bg-white text-amber-600 hover:bg-amber-50 border border-amber-200"
+                  }`}
+                  aria-label="応援スタンプ"
+                >
+                  ✨ {activeTopic && interactions.sparks[activeTopic.id] ? 1 : 0}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!activeTopic) return;
+                  setCommentOpenTopicId((cur) => (cur === activeTopic.id ? null : activeTopic.id));
+                  setCommentDraft("");
+                  // 次の render 後にフォーカスする
+                  window.setTimeout(() => commentDraftRef.current?.focus(), 50);
+                }}
+                className="rounded-full border border-fuchsia-200 bg-white px-2 py-1 text-xs font-bold text-fuchsia-700 hover:bg-fuchsia-50"
+              >
+                💬 {activeComments.length}
+              </button>
+            </div>
+          </div>
+
+          {activeTopic && commentOpenTopicId === activeTopic.id && (
+            <div className="absolute left-0 right-0 top-full z-10 mt-2 rounded-xl border border-fuchsia-200 bg-white p-3 shadow-lg">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitComment(activeTopic.id);
+                }}
+                className="flex items-center gap-2"
+              >
+                <input
+                  ref={commentDraftRef}
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                  placeholder="一言コメント…"
+                  className="w-full rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-2 py-2 text-xs font-bold text-fuchsia-900 placeholder:text-fuchsia-300 focus:outline-none focus:ring-2 focus:ring-fuchsia-300"
+                  maxLength={60}
+                />
+                <button
+                  type="submit"
+                  className="shrink-0 rounded-lg bg-gradient-to-r from-fuchsia-500 to-violet-600 px-3 py-2 text-xs font-bold text-white shadow-sm"
+                >
+                  送信
+                </button>
+              </form>
+
+              {activeComments.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {activeComments.slice(-2).map((c) => (
+                    <p key={c.id} className="text-[11px] font-bold text-slate-700">
+                      {c.text}
+                    </p>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 text-[10px] font-bold text-slate-400">※ 一言コメント</div>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* アクションボタン */}
       <Link
