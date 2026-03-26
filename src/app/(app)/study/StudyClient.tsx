@@ -102,7 +102,7 @@ export function StudyClient({
   const [message, setMessage] = useState<string | null>(null);
   const msgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showMessage = (text: string | null) => {
-    showMessage(text);
+    setMessage(text);
     if (msgTimerRef.current) clearTimeout(msgTimerRef.current);
     if (text !== null) {
       msgTimerRef.current = setTimeout(() => showMessage(null), 4000);
