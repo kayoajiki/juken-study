@@ -179,30 +179,30 @@ export function HomeClient({
   const activeTopic = topics[topicIndex] ?? null;
   const activeComments = activeTopic ? interactions.comments[activeTopic.id] ?? [] : [];
 
-  const toggleLike = async (topicId: string) => {
-    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "likes" });
-    await refreshTopics([topicId]);
+  type StampKey = "likes" | "sparks" | "cheers" | "focuses" | "stars";
+
+  const toggleStamp = (topicId: string, stampType: StampKey) => {
+    // オプティミスティック更新：通信前にローカル状態を即座に反映
+    setInteractions((prev) => {
+      const prevMy = prev.my[topicId] ?? { likes: false, sparks: false, cheers: false, focuses: false, stars: false };
+      const prevCounts = prev.counts[topicId] ?? { likes: 0, sparks: 0, cheers: 0, focuses: 0, stars: 0 };
+      const next = !prevMy[stampType];
+      return {
+        ...prev,
+        my: { ...prev.my, [topicId]: { ...prevMy, [stampType]: next } },
+        counts: { ...prev.counts, [topicId]: { ...prevCounts, [stampType]: prevCounts[stampType] + (next ? 1 : -1) } },
+      };
+    });
+    // バックグラウンドで通信・再取得（エラー時は再取得で正しい状態に戻す）
+    void toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType })
+      .then(() => refreshTopics([topicId]));
   };
 
-  const toggleSpark = async (topicId: string) => {
-    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "sparks" });
-    await refreshTopics([topicId]);
-  };
-
-  const toggleCheers = async (topicId: string) => {
-    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "cheers" });
-    await refreshTopics([topicId]);
-  };
-
-  const toggleFocus = async (topicId: string) => {
-    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "focuses" });
-    await refreshTopics([topicId]);
-  };
-
-  const toggleStar = async (topicId: string) => {
-    await toggleHomeTopicStampAction({ dateKey: todayYmd, topicId, stampType: "stars" });
-    await refreshTopics([topicId]);
-  };
+  const toggleLike   = (topicId: string) => toggleStamp(topicId, "likes");
+  const toggleSpark  = (topicId: string) => toggleStamp(topicId, "sparks");
+  const toggleCheers = (topicId: string) => toggleStamp(topicId, "cheers");
+  const toggleFocus  = (topicId: string) => toggleStamp(topicId, "focuses");
+  const toggleStar   = (topicId: string) => toggleStamp(topicId, "stars");
 
   const submitComment = async (topicId: string) => {
     const text = commentDraft.trim();
