@@ -338,6 +338,11 @@ export function HomeClient({
             to { transform: translateY(0); opacity: 1; }
           }
           .topic-slide-in { animation: topicSlideIn 320ms ease-out both; }
+          @keyframes topicBgFlash {
+            0%   { opacity: 0.3; }
+            100% { opacity: 1; }
+          }
+          .topic-bg-flash { animation: topicBgFlash 400ms ease-out both; }
         `}</style>
 
         <div className="flex items-center justify-between">
@@ -349,7 +354,21 @@ export function HomeClient({
           ) : null}
         </div>
 
-        <div className="relative mt-3 rounded-xl border border-fuchsia-100 bg-fuchsia-50 p-3">
+        {(() => {
+          const bgCycles = [
+            { bg: "#fdf4ff", border: "#e879f9" }, // fuchsia
+            { bg: "#eff6ff", border: "#60a5fa" }, // blue
+            { bg: "#f0fdf4", border: "#4ade80" }, // green
+            { bg: "#fffbeb", border: "#fbbf24" }, // amber
+          ];
+          const { bg, border } = bgCycles[topicIndex % bgCycles.length];
+          return (
+            <div
+              key={topicSlideKey}
+              className="topic-bg-flash relative mt-3 rounded-xl p-3"
+              style={{ backgroundColor: bg, border: `1px solid ${border}` }}
+            >
+
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               {activeTopic ? (
@@ -538,7 +557,9 @@ export function HomeClient({
               <div className="mt-2 text-[10px] font-bold text-slate-400">※ 一言コメント</div>
             </div>
           )}
-        </div>
+            </div>
+          );
+        })()}
       </section>
 
       {/* アクションボタン */}
