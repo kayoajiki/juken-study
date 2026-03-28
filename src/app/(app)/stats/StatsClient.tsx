@@ -75,7 +75,7 @@ export function StatsClient({
   const [tab, setTab] = useState<Tab>("graph");
   const [sessions, setSessions] = useState<Row[]>(initialSessions);
 
-  const recentSessionsReversed = useMemo(() => sessions.slice().reverse().slice(0, 20), [sessions]);
+  const recentSessionsReversed = useMemo(() => sessions.slice(0, 20), [sessions]);
 
   // 削除確認モーダル
   const [confirmTarget, setConfirmTarget] = useState<Row | null>(null);
