@@ -134,25 +134,13 @@ export function StatsClient({
       .filter((d) => d.homework > 0 || d.self_study > 0);
   }, [sessions, range]);
 
-  const kindSubjectColors = useMemo(() => {
-    const count = Math.max(SUBJECTS.length - 1, 1);
-    return Object.fromEntries(
-      SUBJECTS.map((s, i) => {
-        const ratio = i / count;
-        const homeworkHue = 195 + Math.round(55 * ratio); // deep blue -> bright cyan (cool)
-        const selfStudyHue = 8 + Math.round(42 * ratio); // red-orange -> vivid amber (warm)
-        const homeworkLightness = 48 + Math.round(12 * ratio);
-        const selfStudyLightness = 46 + Math.round(16 * ratio);
-        return [
-          s.id,
-          {
-            homework: `hsl(${homeworkHue} 92% ${homeworkLightness}%)`,
-            self_study: `hsl(${selfStudyHue} 95% ${selfStudyLightness}%)`,
-          },
-        ];
-      })
-    ) as Record<string, { homework: string; self_study: string }>;
-  }, []);
+  const kindSubjectColors: Record<string, { homework: string; self_study: string }> = {
+    math:     { homework: "#2563eb", self_study: "#93c5fd" }, // 算数: 青  / 水色
+    japanese: { homework: "#dc2626", self_study: "#fca5a5" }, // 国語: 赤  / 薄赤
+    science:  { homework: "#16a34a", self_study: "#86efac" }, // 理科: 緑  / 薄緑
+    social:   { homework: "#d97706", self_study: "#fcd34d" }, // 社会: 橙  / 薄黄
+    aptitude: { homework: "#7c3aed", self_study: "#c4b5fd" }, // 適性: 紫  / 薄紫
+  };
 
   // ── スタンプ tab ────────────────────────────────
   const todayYM = tokyoYmd().slice(0, 7);
