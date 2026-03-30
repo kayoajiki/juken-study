@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
 import { getDb, schedules, scheduleMemos } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
 import { dbScheduleToRow } from "@/lib/schedule-map";
@@ -123,11 +123,26 @@ export async function toggleScheduleEnabledAction(
 export async function listMemosAction(date: string): Promise<MemoRow[]> {
   const userId = await getSessionUserId();
   if (!userId) return [];
-  const rows = await getDb()
+  const todayJst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
+  const db = getDb();
+
+  // 今日のみ過去の未完了メモを持ち越す（過去・未来の日付ではその日のメモだけ）
+  const condition =
+    date === todayJst
+      ? and(
+          eq(scheduleMemos.userId, userId),
+          or(
+            eq(scheduleMemos.date, date),
+            and(lt(scheduleMemos.date, date), eq(scheduleMemos.done, false))
+          )
+        )
+      : and(eq(scheduleMemos.userId, userId), eq(scheduleMemos.date, date));
+
+  const rows = await db
     .select()
     .from(scheduleMemos)
-    .where(and(eq(scheduleMemos.userId, userId), eq(scheduleMemos.date, date)))
-    .orderBy(asc(scheduleMemos.createdAt));
+    .where(condition)
+    .orderBy(asc(scheduleMemos.date), asc(scheduleMemos.createdAt));
   return rows.map((r) => ({ id: r.id, date: r.date, text: r.text, done: r.done }));
 }
 

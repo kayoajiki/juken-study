@@ -255,18 +255,25 @@ export function ScheduleClient({
   };
 
   const toggleMemo = async (id: string, current: boolean) => {
-    setMemosByDate((prev) => ({
-      ...prev,
-      [selectedDate]: (prev[selectedDate] ?? []).map((m) => m.id === id ? { ...m, done: !current } : m),
-    }));
+    // 全キャッシュ日付にまたがって更新（持ち越しメモが複数日に表示されているため）
+    setMemosByDate((prev) => {
+      const next: Record<string, MemoRow[]> = {};
+      for (const [d, memos] of Object.entries(prev)) {
+        next[d] = memos.map((m) => m.id === id ? { ...m, done: !current } : m);
+      }
+      return next;
+    });
     await toggleMemoAction(id, !current);
   };
 
   const deleteMemo = async (id: string) => {
-    setMemosByDate((prev) => ({
-      ...prev,
-      [selectedDate]: (prev[selectedDate] ?? []).filter((m) => m.id !== id),
-    }));
+    setMemosByDate((prev) => {
+      const next: Record<string, MemoRow[]> = {};
+      for (const [d, memos] of Object.entries(prev)) {
+        next[d] = memos.filter((m) => m.id !== id);
+      }
+      return next;
+    });
     await deleteMemoAction(id);
   };
 
@@ -709,6 +716,11 @@ export function ScheduleClient({
                   </button>
                   <span className={`flex-1 text-sm ${m.done ? "text-slate-400 line-through" : "text-violet-900"}`}>
                     {m.text}
+                    {m.date !== selectedDate && (
+                      <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-600 not-italic" style={{textDecoration: "none"}}>
+                        {m.date.slice(5).replace("-", "/")}
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
