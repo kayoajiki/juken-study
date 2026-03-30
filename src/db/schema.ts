@@ -136,6 +136,21 @@ export const homeTopicComments = sqliteTable(
   ]
 );
 
+export const scheduleMemos = sqliteTable(
+  "schedule_memos",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    date: text("date").notNull(), // YYYY-MM-DD (Asia/Tokyo)
+    text: text("text").notNull(),
+    done: integer("done", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("schedule_memos_user_date_idx").on(t.userId, t.date)]
+);
+
 export const monthlyTestReports = sqliteTable(
   "monthly_test_reports",
   {

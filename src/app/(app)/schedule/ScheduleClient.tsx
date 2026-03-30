@@ -8,6 +8,11 @@ import {
   getArchivedSchedulesByDateAction,
   listSchedulesAction,
   toggleScheduleEnabledAction,
+  addMemoAction,
+  toggleMemoAction,
+  deleteMemoAction,
+  listMemosAction,
+  type MemoRow,
 } from "@/app/actions/schedules";
 import { setDailyGoalAction } from "@/app/actions/profile";
 import { nextScheduleFire, type ScheduleRow } from "@/lib/schedules";
@@ -178,9 +183,11 @@ const CLOCK_MIN_OPTIONS = [0, 15, 30, 45]; // 時刻用（15分刻み）
 export function ScheduleClient({
   initial,
   dailyGoalMinutes,
+  initialMemos = [],
 }: {
   initial: ScheduleRow[];
   dailyGoalMinutes: number;
+  initialMemos?: MemoRow[];
 }) {
   const [rows, setRows] = useState<ScheduleRow[]>(initial);
 
@@ -203,6 +210,65 @@ export function ScheduleClient({
   const todayKey = tokyoTodayKey();
 
   const [archivedForDate, setArchivedForDate] = useState<ScheduleRow[]>([]);
+
+  // メモ
+  const [memosByDate, setMemosByDate] = useState<Record<string, MemoRow[]>>(() => {
+    const todayKey = tokyoTodayKey();
+    return initialMemos.length > 0 ? { [todayKey]: initialMemos } : {};
+  });
+  const [memoInput, setMemoInput] = useState("");
+  const memoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const memosForDate = memosByDate[selectedDate] ?? [];
+
+  const loadMemos = async (date: string) => {
+    if (memosByDate[date] !== undefined) return;
+    const memos = await listMemosAction(date);
+    setMemosByDate((prev) => ({ ...prev, [date]: memos }));
+  };
+
+  const addMemo = async () => {
+    const text = memoInput.trim();
+    if (!text) return;
+    // 楽観的UI: 仮IDで即追加
+    const tmpId = `tmp-${Date.now()}`;
+    const optimistic: MemoRow = { id: tmpId, date: selectedDate, text, done: false };
+    setMemosByDate((prev) => ({ ...prev, [selectedDate]: [...(prev[selectedDate] ?? []), optimistic] }));
+    setMemoInput("");
+    // フォーカス中は空でもプレースホルダーが出ない端末があるため、登録直後に外す
+    queueMicrotask(() => memoInputRef.current?.blur());
+    const res = await addMemoAction(selectedDate, text);
+    if (res.ok) {
+      // 仮IDを本IDに差し替え
+      setMemosByDate((prev) => ({
+        ...prev,
+        [selectedDate]: (prev[selectedDate] ?? []).map((m) => m.id === tmpId ? res.memo : m),
+      }));
+    } else {
+      // 失敗: ロールバック＋入力を戻す
+      setMemoInput(text);
+      setMemosByDate((prev) => ({
+        ...prev,
+        [selectedDate]: (prev[selectedDate] ?? []).filter((m) => m.id !== tmpId),
+      }));
+    }
+  };
+
+  const toggleMemo = async (id: string, current: boolean) => {
+    setMemosByDate((prev) => ({
+      ...prev,
+      [selectedDate]: (prev[selectedDate] ?? []).map((m) => m.id === id ? { ...m, done: !current } : m),
+    }));
+    await toggleMemoAction(id, !current);
+  };
+
+  const deleteMemo = async (id: string) => {
+    setMemosByDate((prev) => ({
+      ...prev,
+      [selectedDate]: (prev[selectedDate] ?? []).filter((m) => m.id !== id),
+    }));
+    await deleteMemoAction(id);
+  };
 
   const [msg, setMsg] = useState<string | null>(null);
   const [added, setAdded] = useState(false);
@@ -271,6 +337,7 @@ export function ScheduleClient({
     } else {
       setArchivedForDate([]);
     }
+    loadMemos(selectedDate);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
@@ -619,6 +686,66 @@ export function ScheduleClient({
               )}
             </ul>
           )}
+        </div>
+
+        {/* メモ */}
+        <div className="border-t border-fuchsia-100 pt-3">
+          <h3 className="mb-2 text-xs font-bold text-fuchsia-700">📝 メモ</h3>
+          {memosForDate.length > 0 && (
+            <ul className="mb-2 space-y-1">
+              {memosForDate.map((m) => (
+                <li key={m.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
+                  <button
+                    type="button"
+                    onClick={() => toggleMemo(m.id, m.done)}
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 text-xs transition-colors ${
+                      m.done
+                        ? "border-fuchsia-400 bg-fuchsia-400 text-white"
+                        : "border-slate-300 bg-white text-transparent hover:border-fuchsia-300"
+                    }`}
+                    aria-label={m.done ? "未完了に戻す" : "完了にする"}
+                  >
+                    ✓
+                  </button>
+                  <span className={`flex-1 text-sm ${m.done ? "text-slate-400 line-through" : "text-violet-900"}`}>
+                    {m.text}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteMemo(m.id)}
+                    className="shrink-0 text-slate-300 hover:text-rose-400 transition-colors text-xs px-1"
+                    aria-label="削除"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex gap-2">
+            <input
+              ref={memoInputRef}
+              type="text"
+              value={memoInput}
+              onChange={(e) => setMemoInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void addMemo();
+                }
+              }}
+              placeholder="メモを追加..."
+              className="flex-1 rounded-lg border-2 border-fuchsia-200 bg-white px-3 py-1.5 text-sm text-violet-900 placeholder-slate-400 outline-none focus:border-fuchsia-400"
+            />
+            <button
+              type="button"
+              onClick={addMemo}
+              disabled={!memoInput.trim()}
+              className="rounded-lg bg-fuchsia-500 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-fuchsia-600 disabled:opacity-40 transition-colors"
+            >
+              ＋
+            </button>
+          </div>
         </div>
       </section>
 

@@ -1,11 +1,18 @@
 "use server";
 
 import { and, asc, eq, isNull, lt } from "drizzle-orm";
-import { getDb, schedules } from "@/db";
+import { getDb, schedules, scheduleMemos } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
 import { dbScheduleToRow } from "@/lib/schedule-map";
 import type { ScheduleRow } from "@/lib/schedules";
 import type { SubjectId } from "@/lib/subjects";
+
+export type MemoRow = {
+  id: string;
+  date: string;
+  text: string;
+  done: boolean;
+};
 
 export type ScheduleRowDTO = ScheduleRow;
 
@@ -108,5 +115,63 @@ export async function toggleScheduleEnabledAction(
     .update(schedules)
     .set({ enabled })
     .where(and(eq(schedules.id, id), eq(schedules.userId, userId)));
+  return { ok: true };
+}
+
+// ── メモ ──────────────────────────────────────────────
+
+export async function listMemosAction(date: string): Promise<MemoRow[]> {
+  const userId = await getSessionUserId();
+  if (!userId) return [];
+  const rows = await getDb()
+    .select()
+    .from(scheduleMemos)
+    .where(and(eq(scheduleMemos.userId, userId), eq(scheduleMemos.date, date)))
+    .orderBy(asc(scheduleMemos.createdAt));
+  return rows.map((r) => ({ id: r.id, date: r.date, text: r.text, done: r.done }));
+}
+
+export async function addMemoAction(
+  date: string,
+  text: string
+): Promise<{ ok: true; memo: MemoRow } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "未ログイン" };
+  const trimmed = text.trim();
+  if (!trimmed) return { ok: false, error: "テキストを入力してください" };
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await getDb().insert(scheduleMemos).values({
+    id,
+    userId,
+    date,
+    text: trimmed,
+    done: false,
+    createdAt: now,
+  });
+  return { ok: true, memo: { id, date, text: trimmed, done: false } };
+}
+
+export async function toggleMemoAction(
+  id: string,
+  done: boolean
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "未ログイン" };
+  await getDb()
+    .update(scheduleMemos)
+    .set({ done })
+    .where(and(eq(scheduleMemos.id, id), eq(scheduleMemos.userId, userId)));
+  return { ok: true };
+}
+
+export async function deleteMemoAction(
+  id: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { ok: false, error: "未ログイン" };
+  await getDb()
+    .delete(scheduleMemos)
+    .where(and(eq(scheduleMemos.id, id), eq(scheduleMemos.userId, userId)));
   return { ok: true };
 }
