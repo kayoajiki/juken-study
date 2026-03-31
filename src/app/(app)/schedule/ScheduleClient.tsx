@@ -12,10 +12,12 @@ import {
   toggleMemoAction,
   deleteMemoAction,
   listMemosAction,
+  type MemoRepeatType,
   type MemoRow,
 } from "@/app/actions/schedules";
 import { setDailyGoalAction } from "@/app/actions/profile";
 import { nextScheduleFire, type ScheduleRow } from "@/lib/schedules";
+import { tokyoWeekdaySun0 } from "@/lib/tokyo-date";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 const WEEKDAY_COLORS = [
@@ -180,14 +182,27 @@ const MIN_OPTIONS = [0, 30]; // 目標時間用
 const CLOCK_HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i); // 0-23
 const CLOCK_MIN_OPTIONS = [0, 15, 30, 45]; // 時刻用（15分刻み）
 
+const MEMO_REPEAT_OPTIONS: { value: MemoRepeatType; label: string }[] = [
+  { value: "once", label: "この日だけ" },
+  { value: "daily", label: "毎日" },
+  { value: "weekdays", label: "平日" },
+  { value: "weekly", label: "毎週" },
+];
+
+function memoRepeatShortLabel(t: MemoRepeatType) {
+  return MEMO_REPEAT_OPTIONS.find((o) => o.value === t)?.label ?? t;
+}
+
 export function ScheduleClient({
   initial,
   dailyGoalMinutes,
   initialMemos = [],
+  initialMemosDateKey,
 }: {
   initial: ScheduleRow[];
   dailyGoalMinutes: number;
   initialMemos?: MemoRow[];
+  initialMemosDateKey?: string;
 }) {
   const [rows, setRows] = useState<ScheduleRow[]>(initial);
 
@@ -213,10 +228,11 @@ export function ScheduleClient({
 
   // メモ
   const [memosByDate, setMemosByDate] = useState<Record<string, MemoRow[]>>(() => {
-    const todayKey = tokyoTodayKey();
-    return initialMemos.length > 0 ? { [todayKey]: initialMemos } : {};
+    const key = initialMemosDateKey ?? tokyoTodayKey();
+    return initialMemos.length > 0 ? { [key]: initialMemos } : {};
   });
   const [memoInput, setMemoInput] = useState("");
+  const [memoRepeat, setMemoRepeat] = useState<MemoRepeatType>("once");
   const memoInputRef = useRef<HTMLInputElement | null>(null);
 
   const memosForDate = memosByDate[selectedDate] ?? [];
@@ -232,18 +248,28 @@ export function ScheduleClient({
     if (!text) return;
     // 楽観的UI: 仮IDで即追加
     const tmpId = `tmp-${Date.now()}`;
-    const optimistic: MemoRow = { id: tmpId, date: selectedDate, text, done: false };
+    const wk = memoRepeat === "weekly" ? tokyoWeekdaySun0(selectedDate) : null;
+    const optimistic: MemoRow = {
+      id: tmpId,
+      date: selectedDate,
+      occurrenceDate: selectedDate,
+      text,
+      done: false,
+      repeatType: memoRepeat,
+      weekday: wk,
+    };
     setMemosByDate((prev) => ({ ...prev, [selectedDate]: [...(prev[selectedDate] ?? []), optimistic] }));
     setMemoInput("");
     // フォーカス中は空でもプレースホルダーが出ない端末があるため、登録直後に外す
     queueMicrotask(() => memoInputRef.current?.blur());
-    const res = await addMemoAction(selectedDate, text);
+    const res = await addMemoAction(selectedDate, text, { repeatType: memoRepeat });
     if (res.ok) {
       // 仮IDを本IDに差し替え
       setMemosByDate((prev) => ({
         ...prev,
         [selectedDate]: (prev[selectedDate] ?? []).map((m) => m.id === tmpId ? res.memo : m),
       }));
+      setMemoRepeat("once");
     } else {
       // 失敗: ロールバック＋入力を戻す
       setMemoInput(text);
@@ -254,16 +280,14 @@ export function ScheduleClient({
     }
   };
 
-  const toggleMemo = async (id: string, current: boolean) => {
-    // 全キャッシュ日付にまたがって更新（持ち越しメモが複数日に表示されているため）
-    setMemosByDate((prev) => {
-      const next: Record<string, MemoRow[]> = {};
-      for (const [d, memos] of Object.entries(prev)) {
-        next[d] = memos.map((m) => m.id === id ? { ...m, done: !current } : m);
-      }
-      return next;
-    });
-    await toggleMemoAction(id, !current);
+  const toggleMemo = async (id: string, occurrenceDate: string, current: boolean) => {
+    setMemosByDate((prev) => ({
+      ...prev,
+      [occurrenceDate]: (prev[occurrenceDate] ?? []).map((m) =>
+        m.id === id ? { ...m, done: !current } : m
+      ),
+    }));
+    await toggleMemoAction(id, !current, occurrenceDate);
   };
 
   const deleteMemo = async (id: string) => {
@@ -701,10 +725,13 @@ export function ScheduleClient({
           {memosForDate.length > 0 && (
             <ul className="mb-2 space-y-1">
               {memosForDate.map((m) => (
-                <li key={m.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm">
+                <li
+                  key={`${m.id}-${m.occurrenceDate}`}
+                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 shadow-sm"
+                >
                   <button
                     type="button"
-                    onClick={() => toggleMemo(m.id, m.done)}
+                    onClick={() => void toggleMemo(m.id, m.occurrenceDate, m.done)}
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 text-xs transition-colors ${
                       m.done
                         ? "border-fuchsia-400 bg-fuchsia-400 text-white"
@@ -716,7 +743,15 @@ export function ScheduleClient({
                   </button>
                   <span className={`flex-1 text-sm ${m.done ? "text-slate-400 line-through" : "text-violet-900"}`}>
                     {m.text}
-                    {m.date !== selectedDate && (
+                    {m.repeatType !== "once" && (
+                      <span
+                        className="ml-1.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-semibold text-violet-600 not-italic"
+                        style={{ textDecoration: "none" }}
+                      >
+                        {memoRepeatShortLabel(m.repeatType)}
+                      </span>
+                    )}
+                    {m.repeatType === "once" && m.date !== m.occurrenceDate && (
                       <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold text-amber-600 not-italic" style={{textDecoration: "none"}}>
                         {m.date.slice(5).replace("-", "/")}
                       </span>
@@ -734,7 +769,19 @@ export function ScheduleClient({
               ))}
             </ul>
           )}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={memoRepeat}
+              onChange={(e) => setMemoRepeat(e.target.value as MemoRepeatType)}
+              className="max-w-[40%] min-w-[7rem] shrink-0 rounded-lg border-2 border-fuchsia-200 bg-white px-2 py-1.5 text-xs font-semibold text-violet-900 outline-none focus:border-fuchsia-400 sm:max-w-none"
+              aria-label="メモの繰り返し"
+            >
+              {MEMO_REPEAT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
             <input
               ref={memoInputRef}
               type="text"
@@ -747,11 +794,11 @@ export function ScheduleClient({
                 }
               }}
               placeholder="メモを追加..."
-              className="flex-1 rounded-lg border-2 border-fuchsia-200 bg-white px-3 py-1.5 text-sm text-violet-900 placeholder-slate-400 outline-none focus:border-fuchsia-400"
+              className="min-w-0 flex-1 basis-[140px] rounded-lg border-2 border-fuchsia-200 bg-white px-3 py-1.5 text-sm text-violet-900 placeholder-slate-400 outline-none focus:border-fuchsia-400"
             />
             <button
               type="button"
-              onClick={addMemo}
+              onClick={() => void addMemo()}
               disabled={!memoInput.trim()}
               className="rounded-lg bg-fuchsia-500 px-3 py-1.5 text-sm font-bold text-white shadow-sm hover:bg-fuchsia-600 disabled:opacity-40 transition-colors"
             >

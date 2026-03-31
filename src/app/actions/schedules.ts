@@ -1,18 +1,15 @@
 "use server";
 
 import { and, asc, eq, isNull, lt, or } from "drizzle-orm";
-import { getDb, schedules, scheduleMemos } from "@/db";
+import { getDb, schedules, scheduleMemoDayDone, scheduleMemos } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
 import { dbScheduleToRow } from "@/lib/schedule-map";
+import { loadMemosForDate, type MemoRepeatType, type MemoRow } from "@/lib/schedule-memos";
+import { tokyoWeekdaySun0 } from "@/lib/tokyo-date";
 import type { ScheduleRow } from "@/lib/schedules";
 import type { SubjectId } from "@/lib/subjects";
 
-export type MemoRow = {
-  id: string;
-  date: string;
-  text: string;
-  done: boolean;
-};
+export type { MemoRepeatType, MemoRow } from "@/lib/schedule-memos";
 
 export type ScheduleRowDTO = ScheduleRow;
 
@@ -123,37 +120,21 @@ export async function toggleScheduleEnabledAction(
 export async function listMemosAction(date: string): Promise<MemoRow[]> {
   const userId = await getSessionUserId();
   if (!userId) return [];
-  const todayJst = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo" }).format(new Date());
-  const db = getDb();
-
-  // 今日のみ過去の未完了メモを持ち越す（過去・未来の日付ではその日のメモだけ）
-  const condition =
-    date === todayJst
-      ? and(
-          eq(scheduleMemos.userId, userId),
-          or(
-            eq(scheduleMemos.date, date),
-            and(lt(scheduleMemos.date, date), eq(scheduleMemos.done, false))
-          )
-        )
-      : and(eq(scheduleMemos.userId, userId), eq(scheduleMemos.date, date));
-
-  const rows = await db
-    .select()
-    .from(scheduleMemos)
-    .where(condition)
-    .orderBy(asc(scheduleMemos.date), asc(scheduleMemos.createdAt));
-  return rows.map((r) => ({ id: r.id, date: r.date, text: r.text, done: r.done }));
+  return loadMemosForDate(getDb(), userId, date);
 }
 
 export async function addMemoAction(
   date: string,
-  text: string
+  text: string,
+  opts?: { repeatType?: MemoRepeatType; weekday?: number | null }
 ): Promise<{ ok: true; memo: MemoRow } | { ok: false; error: string }> {
   const userId = await getSessionUserId();
   if (!userId) return { ok: false, error: "未ログイン" };
   const trimmed = text.trim();
   if (!trimmed) return { ok: false, error: "テキストを入力してください" };
+  const repeatType: MemoRepeatType = opts?.repeatType ?? "once";
+  const weekday =
+    repeatType === "weekly" ? (opts?.weekday ?? tokyoWeekdaySun0(date)) : null;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await getDb().insert(scheduleMemos).values({
@@ -162,21 +143,67 @@ export async function addMemoAction(
     date,
     text: trimmed,
     done: false,
+    repeatType,
+    weekday,
     createdAt: now,
   });
-  return { ok: true, memo: { id, date, text: trimmed, done: false } };
+  return {
+    ok: true,
+    memo: {
+      id,
+      date,
+      occurrenceDate: date,
+      text: trimmed,
+      done: false,
+      repeatType,
+      weekday,
+    },
+  };
 }
 
 export async function toggleMemoAction(
   id: string,
-  done: boolean
+  done: boolean,
+  occurrenceDate: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await getSessionUserId();
   if (!userId) return { ok: false, error: "未ログイン" };
-  await getDb()
-    .update(scheduleMemos)
-    .set({ done })
-    .where(and(eq(scheduleMemos.id, id), eq(scheduleMemos.userId, userId)));
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(scheduleMemos)
+    .where(and(eq(scheduleMemos.id, id), eq(scheduleMemos.userId, userId)))
+    .limit(1);
+  if (!row) return { ok: false, error: "見つかりません" };
+
+  if (row.repeatType === "once") {
+    await db
+      .update(scheduleMemos)
+      .set({ done })
+      .where(and(eq(scheduleMemos.id, id), eq(scheduleMemos.userId, userId)));
+    return { ok: true };
+  }
+
+  const [existing] = await db
+    .select()
+    .from(scheduleMemoDayDone)
+    .where(and(eq(scheduleMemoDayDone.memoId, id), eq(scheduleMemoDayDone.dateKey, occurrenceDate)))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(scheduleMemoDayDone)
+      .set({ done })
+      .where(
+        and(eq(scheduleMemoDayDone.memoId, id), eq(scheduleMemoDayDone.dateKey, occurrenceDate))
+      );
+  } else {
+    await db.insert(scheduleMemoDayDone).values({
+      memoId: id,
+      dateKey: occurrenceDate,
+      done,
+    });
+  }
   return { ok: true };
 }
 

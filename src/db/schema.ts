@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -143,12 +144,30 @@ export const scheduleMemos = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    date: text("date").notNull(), // YYYY-MM-DD (Asia/Tokyo)
+    /** 適用開始日（この日から繰り返し／この日だけならその日） YYYY-MM-DD Tokyo */
+    date: text("date").notNull(),
     text: text("text").notNull(),
     done: integer("done", { mode: "boolean" }).notNull().default(false),
+    /** once | daily | weekdays | weekly（繰り返しは日ごとの完了は schedule_memo_day_done） */
+    repeatType: text("repeat_type").notNull().default("once"),
+    /** weekly のとき 0=日…6=土（東京）。それ以外は null */
+    weekday: integer("weekday"),
     createdAt: text("created_at").notNull(),
   },
   (t) => [index("schedule_memos_user_date_idx").on(t.userId, t.date)]
+);
+
+/** 繰り返しメモの「その日」だけの完了状態 */
+export const scheduleMemoDayDone = sqliteTable(
+  "schedule_memo_day_done",
+  {
+    memoId: text("memo_id")
+      .notNull()
+      .references(() => scheduleMemos.id, { onDelete: "cascade" }),
+    dateKey: text("date_key").notNull(),
+    done: integer("done", { mode: "boolean" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.memoId, t.dateKey] })]
 );
 
 export const monthlyTestReports = sqliteTable(
