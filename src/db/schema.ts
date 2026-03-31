@@ -90,6 +90,25 @@ export const breakRules = sqliteTable(
   (t) => [index("break_rules_user_id_idx").on(t.userId)]
 );
 
+// 日次目標時間の履歴（適用開始日単位）
+export const dailyGoalHistory = sqliteTable(
+  "daily_goal_history",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // この日から適用される目標（Asia/Tokyo, YYYY-MM-DD）
+    effectiveDate: text("effective_date").notNull(),
+    minutes: integer("minutes").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("daily_goal_history_user_effective_unique").on(t.userId, t.effectiveDate),
+    index("daily_goal_history_user_effective_idx").on(t.userId, t.effectiveDate),
+  ]
+);
+
 // 家庭内で共有する「ホーム画面トピックス」スタンプ
 export const homeTopicStamps = sqliteTable(
   "home_topic_stamps",

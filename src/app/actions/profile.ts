@@ -1,8 +1,9 @@
 "use server";
 
-import { eq } from "drizzle-orm";
-import { getDb, breakRules, users } from "@/db";
+import { and, eq } from "drizzle-orm";
+import { getDb, breakRules, dailyGoalHistory, users } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
+import { tokyoYmd } from "@/lib/tokyo-date";
 import { signOutAction } from "./auth";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -50,10 +51,35 @@ export async function setDailyGoalAction(
 ): Promise<ActionResult> {
   const userId = await getSessionUserId();
   if (!userId) return { ok: false, error: "未ログイン" };
-  await getDb()
+  const db = getDb();
+  const normalized = Math.max(0, minutes);
+  await db
     .update(users)
-    .set({ dailyGoalMinutes: Math.max(0, minutes) })
+    .set({ dailyGoalMinutes: normalized })
     .where(eq(users.id, userId));
+
+  const today = tokyoYmd();
+  const now = new Date().toISOString();
+  const [existing] = await db
+    .select({ id: dailyGoalHistory.id })
+    .from(dailyGoalHistory)
+    .where(and(eq(dailyGoalHistory.userId, userId), eq(dailyGoalHistory.effectiveDate, today)))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(dailyGoalHistory)
+      .set({ minutes: normalized })
+      .where(eq(dailyGoalHistory.id, existing.id));
+  } else {
+    await db.insert(dailyGoalHistory).values({
+      id: crypto.randomUUID(),
+      userId,
+      effectiveDate: today,
+      minutes: normalized,
+      createdAt: now,
+    });
+  }
   return { ok: true };
 }
 

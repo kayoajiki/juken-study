@@ -28,6 +28,7 @@ type Row = {
 
 type Tab = "graph" | "stamp" | "rank";
 type Range = "week" | "month" | "all";
+type StampStatus = "S" | "A" | "B" | "C" | "D";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
 const WEEKDAY_COLORS = [
@@ -55,6 +56,30 @@ function startOfRange(r: Range): Date | null {
   return d;
 }
 
+function getStampStatus(target: number, actualTotal: number, selfStudyMinutes: number): StampStatus {
+  if (target <= 0) return "D";
+  if (actualTotal <= 0) return "C";
+  if (actualTotal < target) return "B";
+  return selfStudyMinutes >= 1 ? "S" : "A";
+}
+
+function stampClass(status: StampStatus): string {
+  if (status === "S") return "border border-pink-300 bg-pink-100 text-pink-800 shadow-[0_1px_0_rgba(190,24,93,0.25)]";
+  if (status === "A") return "border border-emerald-300 bg-emerald-100 text-emerald-800 shadow-[0_1px_0_rgba(5,150,105,0.25)]";
+  if (status === "B") return "border border-sky-300 bg-sky-100 text-sky-800 shadow-[0_1px_0_rgba(14,116,144,0.2)]";
+  if (status === "C") return "border-2 border-slate-700 bg-white text-black shadow-none";
+  return "border border-violet-300 bg-violet-100 text-violet-800 shadow-[0_1px_0_rgba(109,40,217,0.2)]";
+}
+
+function daysInMonth(ym: string): number {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+function ymdOf(ym: string, day: number): string {
+  return `${ym}-${String(day).padStart(2, "0")}`;
+}
+
 export function StatsClient({
   sessions: initialSessions,
   dailyGoalMinutes,
@@ -63,6 +88,7 @@ export function StatsClient({
   bestMonthlyPoints,
   bestMonthlySeason,
   earnedBadges,
+  goalHistory,
 }: {
   sessions: Row[];
   dailyGoalMinutes: number;
@@ -71,6 +97,7 @@ export function StatsClient({
   bestMonthlyPoints: number;
   bestMonthlySeason: string | null;
   earnedBadges: EarnedBadge[];
+  goalHistory: { effectiveDate: string; minutes: number }[];
 }) {
   const [tab, setTab] = useState<Tab>("graph");
   const [sessions, setSessions] = useState<Row[]>(initialSessions);
@@ -153,15 +180,31 @@ export function StatsClient({
   }, [displayMonth]);
 
   const dailyMinutes = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<string, { total: number; selfStudy: number }>();
     for (const row of sessions) {
       const ymd = tokyoYmd(new Date(row.started_at));
-      map.set(ymd, (map.get(ymd) ?? 0) + row.minutes);
+      const prev = map.get(ymd) ?? { total: 0, selfStudy: 0 };
+      map.set(ymd, {
+        total: prev.total + row.minutes,
+        selfStudy: prev.selfStudy + (row.kind === "self_study" ? row.minutes : 0),
+      });
     }
     return map;
   }, [sessions]);
 
   const monthGrid = useMemo(() => {
+    const sortedGoalHistory = [...goalHistory].sort((a, b) =>
+      a.effectiveDate.localeCompare(b.effectiveDate)
+    );
+    const targetForDate = (ymd: string) => {
+      let target = 0;
+      for (const h of sortedGoalHistory) {
+        if (h.effectiveDate <= ymd) target = h.minutes;
+        else break;
+      }
+      return target;
+    };
+
     const [y, m] = displayMonth.split("-").map(Number);
     const first = new Date(y, m - 1, 1);
     const startWd = first.getDay();
@@ -172,17 +215,14 @@ export function StatsClient({
       cell.setDate(startDate.getDate() + i);
       const ymd = `${cell.getFullYear()}-${String(cell.getMonth() + 1).padStart(2, "0")}-${String(cell.getDate()).padStart(2, "0")}`;
       const inMonth = cell.getMonth() === m - 1;
-      const actual = dailyMinutes.get(ymd) ?? 0;
-      const target = dailyGoalMinutes;
-      const status: "star" | "check" | "none" =
-        actual > 0
-          ? target === 0 || actual >= target
-            ? "star"
-            : "check"
-          : "none";
-      return { ymd, day: cell.getDate(), inMonth, actual, target, status };
+      const day = dailyMinutes.get(ymd) ?? { total: 0, selfStudy: 0 };
+      const actual = day.total;
+      const selfStudy = day.selfStudy;
+      const target = targetForDate(ymd);
+      const status = getStampStatus(target, actual, selfStudy);
+      return { ymd, day: cell.getDate(), inMonth, actual, selfStudy, target, status };
     });
-  }, [displayMonth, dailyMinutes, dailyGoalMinutes]);
+  }, [displayMonth, dailyMinutes, goalHistory]);
 
   const monthWeeks = useMemo(() => {
     const out: (typeof monthGrid)[] = [];
@@ -202,6 +242,55 @@ export function StatsClient({
       totalMinutes: inMonth.reduce((s, c) => s + c.actual, 0),
     };
   }, [monthGrid]);
+
+  const stampRatioTrend = useMemo(() => {
+    const [nowY, nowM] = tokyoYmd().slice(0, 7).split("-").map(Number);
+    // 半期固定: 4-9月 / 10-3月
+    const halfStartYM =
+      nowM >= 4 && nowM <= 9
+        ? `${nowY}-04`
+        : nowM >= 10
+          ? `${nowY}-10`
+          : `${nowY - 1}-10`;
+    const months = Array.from({ length: 6 }, (_, i) => addMonthsToYM(halfStartYM, i));
+
+    return months.map((ym) => {
+      const counts: Record<StampStatus, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
+      const dim = daysInMonth(ym);
+      for (let day = 1; day <= dim; day += 1) {
+        const ymd = ymdOf(ym, day);
+        const stat = dailyMinutes.get(ymd) ?? { total: 0, selfStudy: 0 };
+        let target = 0;
+        for (const h of goalHistory) {
+          if (h.effectiveDate <= ymd) target = h.minutes;
+          else break;
+        }
+        const status = getStampStatus(target, stat.total, stat.selfStudy);
+        counts[status] += 1;
+      }
+      const denom = Math.max(1, dim);
+      const pct = (v: number) => Math.round((v / denom) * 1000) / 10;
+      return {
+        month: `${Number(ym.slice(5))}月`,
+        S: pct(counts.S),
+        A: pct(counts.A),
+        B: pct(counts.B),
+        C: pct(counts.C),
+        D: pct(counts.D),
+      };
+    });
+  }, [dailyMinutes, goalHistory]);
+
+  const stampHalfLabel = useMemo(() => {
+    const [nowY, nowM] = tokyoYmd().slice(0, 7).split("-").map(Number);
+    if (nowM >= 4 && nowM <= 9) {
+      return `${nowY}年度 上期（4月〜9月）`;
+    }
+    if (nowM >= 10) {
+      return `${nowY}年度 下期（10月〜3月）`;
+    }
+    return `${nowY - 1}年度 下期（10月〜3月）`;
+  }, []);
 
   // ── ランク tab ──────────────────────────────────
   // セッションから算出したローカル合計（グラフ用。ランクはDB値のtotalPointsを使う）
@@ -579,12 +668,12 @@ export function StatsClient({
                               {c.inMonth ? c.day : ""}
                             </span>
                             {c.inMonth && (
-                              <span className="mt-0.5 text-base leading-none">
-                                {c.status === "star"
-                                  ? "⭐"
-                                  : c.status === "check"
-                                    ? "✅"
-                                    : "　"}
+                              <span
+                                className={`relative z-10 mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-black leading-none ${
+                                  c.status === "C" ? "font-mono" : ""
+                                } ${stampClass(c.status)}`}
+                              >
+                                {c.status}
                               </span>
                             )}
                           </div>
@@ -595,9 +684,40 @@ export function StatsClient({
                 ))}
               </tbody>
             </table>
-            <div className="mt-3 flex justify-center gap-4 text-xs text-slate-400">
-              <span>⭐ めざせ！達成！</span>
-              <span>✅ よくできました</span>
+            <div className="mt-3 flex flex-wrap justify-center gap-2 text-[11px] text-slate-500">
+              <span>S: 目標達成 + 自主1分以上</span>
+              <span>A: 目標達成（自主なし）</span>
+              <span>B: 勉強したが未達</span>
+              <span>C: 目標あり・勉強なし</span>
+              <span>D: 目標なし</span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border-2 border-fuchsia-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold text-fuchsia-700">📊 半期ごとの S/A/B/C/D 割合（100%）</p>
+            <p className="mb-2 text-[11px] font-semibold text-violet-600">{stampHalfLabel}</p>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={stampRatioTrend} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f5d0fe" />
+                  <XAxis dataKey="month" tick={{ fill: "#6b21a8", fontSize: 11 }} />
+                  <YAxis
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                    tick={{ fill: "#6b21a8", fontSize: 11 }}
+                  />
+                  <Tooltip
+                    formatter={(v: unknown, name: unknown) => [`${v}%`, String(name)]}
+                    contentStyle={{ background: "#fdf4ff", border: "1px solid #f0abfc" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="S" stackId="ratio" fill="#be185d" />
+                  <Bar dataKey="A" stackId="ratio" fill="#059669" />
+                  <Bar dataKey="B" stackId="ratio" fill="#0284c7" />
+                  <Bar dataKey="C" stackId="ratio" fill="#334155" />
+                  <Bar dataKey="D" stackId="ratio" fill="#7c3aed" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>
