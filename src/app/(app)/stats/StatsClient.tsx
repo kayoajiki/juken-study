@@ -57,7 +57,7 @@ function startOfRange(r: Range): Date | null {
 }
 
 function getStampStatus(target: number, actualTotal: number, selfStudyMinutes: number): StampStatus {
-  if (target <= 0) return "D";
+  if (target <= 0) return actualTotal > 0 ? "B" : "D";
   if (actualTotal <= 0) return "C";
   if (actualTotal < target) return "B";
   return selfStudyMinutes >= 1 ? "S" : "A";
@@ -687,7 +687,7 @@ export function StatsClient({
             <div className="mt-3 flex flex-wrap justify-center gap-2 text-[11px] text-slate-500">
               <span>S: 目標達成 + 自主1分以上</span>
               <span>A: 目標達成（自主なし）</span>
-              <span>B: 勉強したが未達</span>
+              <span>B: 勉強したが未達（or 目標なし）</span>
               <span>C: 目標あり・勉強なし</span>
               <span>D: 目標なし</span>
             </div>
