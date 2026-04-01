@@ -193,16 +193,20 @@ function memoRepeatShortLabel(t: MemoRepeatType) {
   return MEMO_REPEAT_OPTIONS.find((o) => o.value === t)?.label ?? t;
 }
 
+type GoalHistoryEntry = { effectiveDate: string; minutes: number };
+
 export function ScheduleClient({
   initial,
   dailyGoalMinutes,
   initialMemos = [],
   initialMemosDateKey,
+  goalHistory = [],
 }: {
   initial: ScheduleRow[];
   dailyGoalMinutes: number;
   initialMemos?: MemoRow[];
   initialMemosDateKey?: string;
+  goalHistory?: GoalHistoryEntry[];
 }) {
   const [rows, setRows] = useState<ScheduleRow[]>(initial);
 
@@ -211,6 +215,11 @@ export function ScheduleClient({
   const [targetMin, setTargetMin] = useState<number>(() => dailyGoalMinutes % 60 < 30 ? 0 : 30);
   const [goalSaved, setGoalSaved] = useState(false);
   const [goalMsg, setGoalMsg] = useState<string | null>(null);
+
+  // goalHistory のローカルコピー（保存後に即反映するため）
+  const [localGoalHistory, setLocalGoalHistory] = useState<GoalHistoryEntry[]>(goalHistory);
+  const localGoalHistoryRef = useRef(localGoalHistory);
+  localGoalHistoryRef.current = localGoalHistory;
 
   // 2. 時刻（開始・終了）
   const [startHour, setStartHour] = useState(17);
@@ -225,6 +234,35 @@ export function ScheduleClient({
   const todayKey = tokyoTodayKey();
 
   const [archivedForDate, setArchivedForDate] = useState<ScheduleRow[]>([]);
+
+  // 選択日の実効目標を返すヘルパー（最後に設定した目標を継承）
+  const targetForDate = useMemo(() => {
+    const sorted = [...localGoalHistory].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    return (ymd: string): number => {
+      let target = 0;
+      for (const h of sorted) {
+        if (h.effectiveDate <= ymd) target = h.minutes;
+        else break;
+      }
+      return target;
+    };
+  }, [localGoalHistory]);
+
+  // カレンダーで日付を選んだらその日の目標をピッカーに反映
+  useEffect(() => {
+    const sorted = [...localGoalHistoryRef.current].sort((a, b) =>
+      a.effectiveDate.localeCompare(b.effectiveDate)
+    );
+    let target = 0;
+    for (const h of sorted) {
+      if (h.effectiveDate <= selectedDate) target = h.minutes;
+      else break;
+    }
+    setTargetHour(Math.floor(target / 60));
+    setTargetMin(target % 60 < 30 ? 0 : 30);
+  // selectedDate が変わったときだけ実行（goalHistory 更新ではリセットしない）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   // メモ
   const [memosByDate, setMemosByDate] = useState<Record<string, MemoRow[]>>(() => {
@@ -320,10 +358,17 @@ export function ScheduleClient({
   const saveGoal = async () => {
     setGoalMsg(null);
     const minutes = targetHour * 60 + (targetMin as number);
-    const res = await setDailyGoalAction(minutes);
+    const res = await setDailyGoalAction(minutes, selectedDate);
     if (res.ok) {
       setGoalSaved(true);
       setTimeout(() => setGoalSaved(false), 2000);
+      // ローカル履歴を即時更新（再フェッチなしで反映）
+      setLocalGoalHistory((prev) => {
+        const filtered = prev.filter((h) => h.effectiveDate !== selectedDate);
+        return [...filtered, { effectiveDate: selectedDate, minutes }].sort(
+          (a, b) => a.effectiveDate.localeCompare(b.effectiveDate)
+        );
+      });
     } else {
       setGoalMsg("保存に失敗しました");
     }
@@ -399,9 +444,10 @@ export function ScheduleClient({
       cell.setDate(startDate.getDate() + i);
       const ymd = ymdFromDate(cell);
       const count = rows.filter((r) => scheduleAppliesOnYmd(r, ymd)).length;
-      return { ymd, day: cell.getDate(), weekdayIdx: cell.getDay(), inMonth: cell.getMonth() === d.getMonth(), count };
+      const hasGoal = localGoalHistory.some((h) => h.effectiveDate === ymd);
+      return { ymd, day: cell.getDate(), weekdayIdx: cell.getDay(), inMonth: cell.getMonth() === d.getMonth(), count, hasGoal };
     });
-  }, [rows, selectedDate]);
+  }, [rows, selectedDate, localGoalHistory]);
 
   const monthLabel = useMemo(() => {
     const d = dateFromYmd(selectedDate);
@@ -423,165 +469,6 @@ export function ScheduleClient({
   return (
     <main className="mx-auto max-w-lg space-y-6 px-4 py-8">
       <h1 className="text-xl font-bold text-violet-950">📅 予定</h1>
-
-      {/* 追加フォーム */}
-      <section className="space-y-5 rounded-2xl border-2 border-pink-200 bg-white p-4 shadow-md shadow-pink-100">
-
-        {/* 1. 目標時間 */}
-        <div>
-          <p className="mb-1 text-xs font-bold text-pink-600">1. 目標時間を選ぶ</p>
-          <p className="mb-3 text-[11px] text-slate-400">ホームの「今日の目標」に反映されます</p>
-          <div className="flex items-center justify-center gap-3">
-            <DrumPicker value={targetHour} onChange={setTargetHour} options={HOUR_OPTIONS} unit="時間" />
-            <span className="mb-5 text-3xl font-bold text-violet-300">:</span>
-            <DrumPicker value={targetMin} onChange={setTargetMin} options={MIN_OPTIONS} unit="分" />
-          </div>
-          {(() => {
-            const m = targetHour * 60 + (targetMin as number);
-            return (
-              <p className="mt-2 text-center text-sm font-bold text-violet-700">
-                {m > 0
-                  ? `🎯 ${targetHour > 0 ? `${targetHour}時間` : ""}${(targetMin as number) > 0 ? `${targetMin}分` : ""}（${m}分）`
-                  : "⚠️ 1分以上を選んでください"}
-              </p>
-            );
-          })()}
-          <button
-            type="button"
-            onClick={saveGoal}
-            className="mt-3 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-2.5 font-bold text-white shadow-md shadow-emerald-200 active:opacity-90"
-          >
-            💾 目標時間を保存
-          </button>
-          {goalSaved && (
-            <p className="mt-2 animate-pulse rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3 py-2 text-center text-sm font-bold text-emerald-700">
-              ✅ 保存しました！ホームに反映されます
-            </p>
-          )}
-          {goalMsg && (
-            <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{goalMsg}</p>
-          )}
-        </div>
-
-        <hr className="border-pink-100" />
-
-        {/* 2. 時刻 */}
-        <div>
-          <p className="mb-1 text-xs font-bold text-pink-600">2. 時刻を選ぶ</p>
-          <p className="mb-3 text-[11px] text-slate-400">アラームを鳴らす開始・終了時刻を設定します</p>
-          <div className="grid grid-cols-2 gap-4">
-            {/* 開始 */}
-            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-3">
-              <p className="mb-2 text-center text-xs font-bold text-amber-600">▶ スタート</p>
-              <div className="flex items-center justify-center gap-2">
-                <DrumPicker value={startHour} onChange={setStartHour} options={CLOCK_HOUR_OPTIONS} unit="時" />
-                <span className="mb-5 text-2xl font-bold text-amber-400">:</span>
-                <DrumPicker value={startMin} onChange={setStartMin} options={CLOCK_MIN_OPTIONS} unit="分" />
-              </div>
-            </div>
-            {/* 終了 */}
-            <div className="rounded-xl border-2 border-sky-200 bg-sky-50 p-3">
-              <p className="mb-2 text-center text-xs font-bold text-sky-600">⏹ おわり</p>
-              <div className="flex items-center justify-center gap-2">
-                <DrumPicker value={endHour} onChange={setEndHour} options={CLOCK_HOUR_OPTIONS} unit="時" />
-                <span className="mb-5 text-2xl font-bold text-sky-400">:</span>
-                <DrumPicker value={endMin} onChange={setEndMin} options={CLOCK_MIN_OPTIONS} unit="分" />
-              </div>
-            </div>
-          </div>
-          {!timeRangeOk && (
-            <p className="mt-2 text-center text-xs font-semibold text-rose-500">
-              ⚠️ おわりはスタートより後にしてください
-            </p>
-          )}
-          {timeRangeOk && (
-            <p className="mt-2 text-center text-xs font-bold text-slate-500">
-              {fmt2(startHour)}:{fmt2(startMin)} 〜 {fmt2(endHour)}:{fmt2(endMin)}
-            </p>
-          )}
-        </div>
-
-        <hr className="border-pink-100" />
-
-        {/* 3. 繰り返し */}
-        <div>
-          <p className="mb-2 text-xs font-bold text-pink-600">3. 繰り返しを選ぶ</p>
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["once", "この日だけ"],
-                ["daily", "毎日"],
-                ["weekdays", "平日"],
-                ["weekly", "毎週"],
-              ] as const
-            ).map(([k, lab]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setRepeat(k)}
-                className={`rounded-full px-4 py-2 text-sm font-bold transition-all ${
-                  repeat === k
-                    ? k === "once"
-                      ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md"
-                      : "bg-gradient-to-r from-sky-500 to-violet-600 text-white shadow-md"
-                    : k === "once"
-                      ? "border-2 border-rose-200 bg-rose-50 text-rose-600"
-                      : "border-2 border-sky-200 bg-sky-50 text-sky-600"
-                }`}
-              >
-                {lab}
-              </button>
-            ))}
-          </div>
-          {repeat === "once" && (
-            <div className={`mt-2 rounded-xl border-2 px-3 py-2 text-sm font-bold ${
-              isPastDate
-                ? "border-amber-300 bg-amber-50 text-amber-700"
-                : "border-rose-200 bg-rose-50 text-rose-700"
-            }`}>
-              {isPastDate
-                ? `⚠️ ${selectedDate} は過去の日付です。カレンダーから今日以降の日付を選んでください。`
-                : `📅 ${selectedDate} に1回だけ追加します`}
-            </div>
-          )}
-          {repeat === "weekly" && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {["日", "月", "火", "水", "木", "金", "土"].map((lab, i) => (
-                <button
-                  key={lab}
-                  type="button"
-                  onClick={() => setWeekday(i)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition-all ${
-                    weekday === i
-                      ? "bg-gradient-to-r from-fuchsia-500 to-pink-600 text-white shadow-md"
-                      : "bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200"
-                  }`}
-                >
-                  {lab}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 追加ボタン */}
-        <button
-          type="button"
-          onClick={addOne}
-          disabled={!timeRangeOk || isPastDate}
-          className="w-full rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 py-3 font-bold text-white shadow-lg shadow-fuchsia-900/40 disabled:opacity-40 active:opacity-90"
-        >
-          ✅ この内容で追加
-        </button>
-        {added && (
-          <p className="animate-pulse rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-700">
-            ✅ 追加しました！下のカレンダーで確認できます📅
-          </p>
-        )}
-        {msg && (
-          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{msg}</p>
-        )}
-      </section>
 
       {/* カレンダー */}
       <section className="space-y-3 rounded-2xl border-2 border-pink-200 bg-white p-4 shadow-md shadow-pink-100">
@@ -634,8 +521,11 @@ export function ScheduleClient({
                           }`}
                         >
                           <div className="text-xs font-semibold leading-none">{c.day}</div>
-                          <div className="mt-1 text-[9px] font-bold leading-none text-fuchsia-500">
+                          <div className="mt-0.5 text-[9px] font-bold leading-none text-fuchsia-500">
                             {c.count > 0 ? `${c.count}件` : ""}
+                          </div>
+                          <div className="mt-0.5 text-[9px] leading-none">
+                            {c.hasGoal ? "🎯" : ""}
                           </div>
                         </button>
                       </td>
@@ -675,6 +565,17 @@ export function ScheduleClient({
         {/* 選択日のイベント */}
         <div>
           <h3 className="mb-2 text-xs font-bold text-fuchsia-700">{selectedDate} の予定</h3>
+          {(() => {
+            const goalMins = targetForDate(selectedDate);
+            if (goalMins <= 0) return null;
+            const h = Math.floor(goalMins / 60);
+            const m = goalMins % 60;
+            return (
+              <p className="mb-2 rounded-lg bg-violet-50 px-3 py-1.5 text-xs font-bold text-violet-700">
+                🎯 目標: {h > 0 ? `${h}時間` : ""}{m > 0 ? `${m}分` : ""}
+              </p>
+            );
+          })()}
           {selectedDayEvents.length === 0 && archivedForDate.length === 0 ? (
             <p className="text-xs text-slate-500">この日に予定はありません</p>
           ) : (
@@ -806,6 +707,182 @@ export function ScheduleClient({
             </button>
           </div>
         </div>
+      </section>
+
+      {/* 追加フォーム */}
+      <section className="space-y-5 rounded-2xl border-2 border-pink-200 bg-white p-4 shadow-md shadow-pink-100">
+
+        {/* 1. 目標時間 */}
+        <div>
+          {(() => {
+            const isToday = selectedDate === todayKey;
+            const d = dateFromYmd(selectedDate);
+            const dateLabel = isToday
+              ? "今日"
+              : `${d.getMonth() + 1}月${d.getDate()}日`;
+            return (
+              <>
+                <p className="mb-1 text-xs font-bold text-pink-600">1. 目標時間を選ぶ</p>
+                <p className="mb-3 text-[11px] text-slate-400">
+                  {isToday
+                    ? "ホームの「今日の目標」に反映されます"
+                    : `📅 ${dateLabel}の目標時間を設定します`}
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <DrumPicker value={targetHour} onChange={setTargetHour} options={HOUR_OPTIONS} unit="時間" />
+                  <span className="mb-5 text-3xl font-bold text-violet-300">:</span>
+                  <DrumPicker value={targetMin} onChange={setTargetMin} options={MIN_OPTIONS} unit="分" />
+                </div>
+                {(() => {
+                  const m = targetHour * 60 + (targetMin as number);
+                  return (
+                    <p className="mt-2 text-center text-sm font-bold text-violet-700">
+                      {m > 0
+                        ? `🎯 ${targetHour > 0 ? `${targetHour}時間` : ""}${(targetMin as number) > 0 ? `${targetMin}分` : ""}（${m}分）`
+                        : "⚠️ 1分以上を選んでください"}
+                    </p>
+                  );
+                })()}
+                <button
+                  type="button"
+                  onClick={saveGoal}
+                  className="mt-3 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-2.5 font-bold text-white shadow-md shadow-emerald-200 active:opacity-90"
+                >
+                  💾 {isToday ? "今日の" : `${dateLabel}の`}目標時間を保存
+                </button>
+                {goalSaved && (
+                  <p className="mt-2 animate-pulse rounded-xl border-2 border-emerald-300 bg-emerald-50 px-3 py-2 text-center text-sm font-bold text-emerald-700">
+                    {isToday
+                      ? "✅ 保存しました！ホームに反映されます"
+                      : `✅ ${dateLabel}の目標時間を保存しました！`}
+                  </p>
+                )}
+                {goalMsg && (
+                  <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600">{goalMsg}</p>
+                )}
+              </>
+            );
+          })()}
+        </div>
+
+        <hr className="border-pink-100" />
+
+        {/* 2. 時刻 */}
+        <div>
+          <p className="mb-1 text-xs font-bold text-pink-600">2. 時刻を選ぶ</p>
+          <p className="mb-3 text-[11px] text-slate-400">アラームを鳴らす開始・終了時刻を設定します</p>
+          <div className="grid grid-cols-2 gap-4">
+            {/* 開始 */}
+            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-3">
+              <p className="mb-2 text-center text-xs font-bold text-amber-600">▶ スタート</p>
+              <div className="flex items-center justify-center gap-2">
+                <DrumPicker value={startHour} onChange={setStartHour} options={CLOCK_HOUR_OPTIONS} unit="時" />
+                <span className="mb-5 text-2xl font-bold text-amber-400">:</span>
+                <DrumPicker value={startMin} onChange={setStartMin} options={CLOCK_MIN_OPTIONS} unit="分" />
+              </div>
+            </div>
+            {/* 終了 */}
+            <div className="rounded-xl border-2 border-sky-200 bg-sky-50 p-3">
+              <p className="mb-2 text-center text-xs font-bold text-sky-600">⏹ おわり</p>
+              <div className="flex items-center justify-center gap-2">
+                <DrumPicker value={endHour} onChange={setEndHour} options={CLOCK_HOUR_OPTIONS} unit="時" />
+                <span className="mb-5 text-2xl font-bold text-sky-400">:</span>
+                <DrumPicker value={endMin} onChange={setEndMin} options={CLOCK_MIN_OPTIONS} unit="分" />
+              </div>
+            </div>
+          </div>
+          {!timeRangeOk && (
+            <p className="mt-2 text-center text-xs font-semibold text-rose-500">
+              ⚠️ おわりはスタートより後にしてください
+            </p>
+          )}
+          {timeRangeOk && (
+            <p className="mt-2 text-center text-xs font-bold text-slate-500">
+              {fmt2(startHour)}:{fmt2(startMin)} 〜 {fmt2(endHour)}:{fmt2(endMin)}
+            </p>
+          )}
+        </div>
+
+        <hr className="border-pink-100" />
+
+        {/* 3. 繰り返し */}
+        <div>
+          <p className="mb-2 text-xs font-bold text-pink-600">3. 繰り返しを選ぶ</p>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ["once", "この日だけ"],
+                ["daily", "毎日"],
+                ["weekdays", "平日"],
+                ["weekly", "毎週"],
+              ] as const
+            ).map(([k, lab]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setRepeat(k)}
+                className={`rounded-full px-4 py-2 text-sm font-bold transition-all ${
+                  repeat === k
+                    ? k === "once"
+                      ? "bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md"
+                      : "bg-gradient-to-r from-sky-500 to-violet-600 text-white shadow-md"
+                    : k === "once"
+                      ? "border-2 border-rose-200 bg-rose-50 text-rose-600"
+                      : "border-2 border-sky-200 bg-sky-50 text-sky-600"
+                }`}
+              >
+                {lab}
+              </button>
+            ))}
+          </div>
+          {repeat === "once" && (
+            <div className={`mt-2 rounded-xl border-2 px-3 py-2 text-sm font-bold ${
+              isPastDate
+                ? "border-amber-300 bg-amber-50 text-amber-700"
+                : "border-rose-200 bg-rose-50 text-rose-700"
+            }`}>
+              {isPastDate
+                ? `⚠️ ${selectedDate} は過去の日付です。上のカレンダーから今日以降の日付を選んでください。`
+                : `📅 ${selectedDate} に1回だけ追加します`}
+            </div>
+          )}
+          {repeat === "weekly" && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {["日", "月", "火", "水", "木", "金", "土"].map((lab, i) => (
+                <button
+                  key={lab}
+                  type="button"
+                  onClick={() => setWeekday(i)}
+                  className={`rounded-full px-3 py-1.5 text-sm font-bold transition-all ${
+                    weekday === i
+                      ? "bg-gradient-to-r from-fuchsia-500 to-pink-600 text-white shadow-md"
+                      : "bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200"
+                  }`}
+                >
+                  {lab}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 追加ボタン */}
+        <button
+          type="button"
+          onClick={addOne}
+          disabled={!timeRangeOk || isPastDate}
+          className="w-full rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 py-3 font-bold text-white shadow-lg shadow-fuchsia-900/40 disabled:opacity-40 active:opacity-90"
+        >
+          ✅ この内容で追加
+        </button>
+        {added && (
+          <p className="animate-pulse rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 text-center text-sm font-bold text-emerald-700">
+            ✅ 追加しました！上のカレンダーで確認できます📅
+          </p>
+        )}
+        {msg && (
+          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-600">{msg}</p>
+        )}
       </section>
 
       {/* 登録一覧 */}

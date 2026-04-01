@@ -47,23 +47,29 @@ export async function saveBreakBlockAction(
 }
 
 export async function setDailyGoalAction(
-  minutes: number
+  minutes: number,
+  date?: string // YYYY-MM-DD、省略時は今日
 ): Promise<ActionResult> {
   const userId = await getSessionUserId();
   if (!userId) return { ok: false, error: "未ログイン" };
   const db = getDb();
   const normalized = Math.max(0, minutes);
-  await db
-    .update(users)
-    .set({ dailyGoalMinutes: normalized })
-    .where(eq(users.id, userId));
-
   const today = tokyoYmd();
+  const targetDate = date ?? today;
+
+  // 今日以前の場合のみ users.dailyGoalMinutes（ホーム表示用）を更新
+  if (targetDate <= today) {
+    await db
+      .update(users)
+      .set({ dailyGoalMinutes: normalized })
+      .where(eq(users.id, userId));
+  }
+
   const now = new Date().toISOString();
   const [existing] = await db
     .select({ id: dailyGoalHistory.id })
     .from(dailyGoalHistory)
-    .where(and(eq(dailyGoalHistory.userId, userId), eq(dailyGoalHistory.effectiveDate, today)))
+    .where(and(eq(dailyGoalHistory.userId, userId), eq(dailyGoalHistory.effectiveDate, targetDate)))
     .limit(1);
 
   if (existing) {
@@ -75,7 +81,7 @@ export async function setDailyGoalAction(
     await db.insert(dailyGoalHistory).values({
       id: crypto.randomUUID(),
       userId,
-      effectiveDate: today,
+      effectiveDate: targetDate,
       minutes: normalized,
       createdAt: now,
     });
