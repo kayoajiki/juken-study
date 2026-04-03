@@ -63,6 +63,23 @@ function getStampStatus(target: number, actualTotal: number, selfStudyMinutes: n
   return selfStudyMinutes >= 1 ? "S" : "A";
 }
 
+/** 当日は users.dailyGoalMinutes（ホームの今日の目標）を優先。それ以外は履歴を日付順に継承 */
+function targetMinutesForStamp(
+  ymd: string,
+  todayYMD: string,
+  dailyGoalMinutes: number,
+  goalHistory: { effectiveDate: string; minutes: number }[]
+): number {
+  if (ymd === todayYMD) return dailyGoalMinutes;
+  const sorted = [...goalHistory].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+  let target = 0;
+  for (const h of sorted) {
+    if (h.effectiveDate <= ymd) target = h.minutes;
+    else break;
+  }
+  return target;
+}
+
 function stampClass(status: StampStatus): string {
   if (status === "S") return "border border-pink-300 bg-pink-100 text-pink-800 shadow-[0_1px_0_rgba(190,24,93,0.25)]";
   if (status === "A") return "border border-emerald-300 bg-emerald-100 text-emerald-800 shadow-[0_1px_0_rgba(5,150,105,0.25)]";
@@ -193,18 +210,6 @@ export function StatsClient({
   }, [sessions]);
 
   const monthGrid = useMemo(() => {
-    const sortedGoalHistory = [...goalHistory].sort((a, b) =>
-      a.effectiveDate.localeCompare(b.effectiveDate)
-    );
-    const targetForDate = (ymd: string) => {
-      let target = 0;
-      for (const h of sortedGoalHistory) {
-        if (h.effectiveDate <= ymd) target = h.minutes;
-        else break;
-      }
-      return target;
-    };
-
     const [y, m] = displayMonth.split("-").map(Number);
     const first = new Date(y, m - 1, 1);
     const startWd = first.getDay();
@@ -218,11 +223,11 @@ export function StatsClient({
       const day = dailyMinutes.get(ymd) ?? { total: 0, selfStudy: 0 };
       const actual = day.total;
       const selfStudy = day.selfStudy;
-      const target = targetForDate(ymd);
+      const target = targetMinutesForStamp(ymd, todayYMD, dailyGoalMinutes, goalHistory);
       const status = getStampStatus(target, actual, selfStudy);
       return { ymd, day: cell.getDate(), inMonth, actual, selfStudy, target, status };
     });
-  }, [displayMonth, dailyMinutes, goalHistory]);
+  }, [displayMonth, dailyMinutes, goalHistory, dailyGoalMinutes, todayYMD]);
 
   const monthWeeks = useMemo(() => {
     const out: (typeof monthGrid)[] = [];
@@ -231,17 +236,18 @@ export function StatsClient({
   }, [monthGrid]);
 
   const monthStats = useMemo(() => {
-    const inMonth = monthGrid.filter((c) => c.inMonth);
-    const withTarget = inMonth.filter((c) => c.target > 0);
+    // 表示中の月のうち、今日以前（当日含む）だけを集計（未来日は未到来のため除外）
+    const inMonthPast = monthGrid.filter((c) => c.inMonth && c.ymd <= todayYMD);
+    const withTarget = inMonthPast.filter((c) => c.target > 0);
     const achieved = withTarget.filter((c) => c.actual >= c.target);
-    const studied = inMonth.filter((c) => c.actual > 0);
+    const studied = inMonthPast.filter((c) => c.actual > 0);
     return {
       daysWithTarget: withTarget.length,
       daysAchieved: achieved.length,
       daysStudied: studied.length,
-      totalMinutes: inMonth.reduce((s, c) => s + c.actual, 0),
+      totalMinutes: inMonthPast.reduce((s, c) => s + c.actual, 0),
     };
-  }, [monthGrid]);
+  }, [monthGrid, todayYMD]);
 
   const stampRatioTrend = useMemo(() => {
     const [nowY, nowM] = tokyoYmd().slice(0, 7).split("-").map(Number);
@@ -257,18 +263,18 @@ export function StatsClient({
     return months.map((ym) => {
       const counts: Record<StampStatus, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
       const dim = daysInMonth(ym);
+      let eligible = 0;
       for (let day = 1; day <= dim; day += 1) {
         const ymd = ymdOf(ym, day);
+        // 翌日以降は未到来のため集計・割合に含めない
+        if (ymd > todayYMD) continue;
+        eligible += 1;
         const stat = dailyMinutes.get(ymd) ?? { total: 0, selfStudy: 0 };
-        let target = 0;
-        for (const h of goalHistory) {
-          if (h.effectiveDate <= ymd) target = h.minutes;
-          else break;
-        }
+        const target = targetMinutesForStamp(ymd, todayYMD, dailyGoalMinutes, goalHistory);
         const status = getStampStatus(target, stat.total, stat.selfStudy);
         counts[status] += 1;
       }
-      const denom = Math.max(1, dim);
+      const denom = Math.max(1, eligible);
       const pct = (v: number) => Math.round((v / denom) * 1000) / 10;
       return {
         month: `${Number(ym.slice(5))}月`,
@@ -279,7 +285,7 @@ export function StatsClient({
         D: pct(counts.D),
       };
     });
-  }, [dailyMinutes, goalHistory]);
+  }, [dailyMinutes, goalHistory, dailyGoalMinutes, todayYMD]);
 
   const stampHalfLabel = useMemo(() => {
     const [nowY, nowM] = tokyoYmd().slice(0, 7).split("-").map(Number);
@@ -649,6 +655,7 @@ export function StatsClient({
                   <tr key={wi}>
                     {week.map((c) => {
                       const isToday = c.ymd === todayYMD;
+                      const showStamp = c.inMonth && c.ymd <= todayYMD;
                       return (
                         <td key={c.ymd} className="p-0.5">
                           <div
@@ -667,7 +674,7 @@ export function StatsClient({
                             >
                               {c.inMonth ? c.day : ""}
                             </span>
-                            {c.inMonth && (
+                            {showStamp && (
                               <span
                                 className={`relative z-10 mt-0.5 inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-xs font-black leading-none ${
                                   c.status === "C" ? "font-mono" : ""

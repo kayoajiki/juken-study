@@ -3,7 +3,6 @@ import { getDb } from "@/db";
 import { dailyGoalHistory, studySessions, users } from "@/db/schema";
 import { getSessionUserId } from "@/lib/auth/session";
 import { parseBadges } from "@/lib/badges";
-import { tokyoYmd } from "@/lib/tokyo-date";
 import { StatsClient } from "./StatsClient";
 
 export default async function StatsPage() {
@@ -49,9 +48,14 @@ export default async function StatsPage() {
   const bestMonthlyPoints = urow[0]?.bestMonthlyPoints ?? 0;
   const bestMonthlySeason = urow[0]?.bestMonthlySeason ?? null;
   const earnedBadges = parseBadges(urow[0]?.earnedBadges ?? "[]");
-  const goalHistory = goalRows.length > 0
-    ? goalRows
-    : [{ effectiveDate: tokyoYmd(), minutes: dailyGoalMinutes }];
+  // 履歴なしかつ目標0なら空（当日は Stats 側で dailyGoalMinutes のみ参照し D になる）
+  // 履歴なしで目標のみある旧データは、全日に同一目標が効くよう先頭日で1行渡す
+  const goalHistory =
+    goalRows.length > 0
+      ? goalRows
+      : dailyGoalMinutes > 0
+        ? [{ effectiveDate: "1970-01-01", minutes: dailyGoalMinutes }]
+        : [];
 
   return (
     <StatsClient
