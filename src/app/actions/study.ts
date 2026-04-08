@@ -312,11 +312,10 @@ export async function subtractStudyMinutesAction(input: {
   for (const session of sessions) {
     if (remaining <= 0) break;
     if (session.minutes <= remaining) {
-      // セッションの分数を1に縮小（きろくに記録として残す）
-      await db.update(studySessions)
-        .set({ minutes: 1 })
+      // セッションを丸ごと相殺できる場合は削除
+      await db.delete(studySessions)
         .where(eq(studySessions.id, session.id));
-      remaining -= session.minutes - 1;
+      remaining -= session.minutes;
     } else {
       // セッションの一部を減らす
       await db.update(studySessions)

@@ -35,10 +35,14 @@ export default async function HomePage() {
   const todayYmd = tokyoYmd();
   const todayStart = new Date(`${todayYmd}T00:00:00+09:00`).toISOString();
   const todaySessions = await db
-    .select({ minutes: studySessions.minutes })
+    .select({ minutes: studySessions.minutes, kind: studySessions.kind })
     .from(studySessions)
     .where(and(eq(studySessions.userId, userId), gte(studySessions.startedAt, todayStart)));
   const todayActualMin = todaySessions.reduce((s, r) => s + r.minutes, 0);
+  const todaySelfStudyMin = todaySessions.reduce(
+    (s, r) => s + (r.kind === "self_study" ? r.minutes : 0),
+    0
+  );
   const todayTargetMin = profile.dailyGoalMinutes ?? 0;
 
   const recentBadges = parseBadges(profile.earnedBadges ?? "[]").slice(-10).reverse();
@@ -55,6 +59,7 @@ export default async function HomePage() {
       }}
       nextScheduleHint={hint}
       todayActualMin={todayActualMin}
+      todaySelfStudyMin={todaySelfStudyMin}
       todayTargetMin={todayTargetMin}
       recentBadges={recentBadges}
     />

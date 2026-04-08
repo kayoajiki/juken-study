@@ -26,17 +26,21 @@ export function HomeClient({
   profile,
   nextScheduleHint,
   todayActualMin,
+  todaySelfStudyMin,
   todayTargetMin,
   recentBadges,
 }: {
   profile: Profile | null;
   nextScheduleHint: string | null;
   todayActualMin: number;
+  todaySelfStudyMin: number;
   todayTargetMin: number;
   recentBadges: EarnedBadge[];
 }) {
   const streak = profile?.current_streak ?? 0;
   const selfStudyStreak = profile?.self_study_streak ?? 0;
+  const hasStudiedToday = todayActualMin > 0;
+  const hasSelfStudiedToday = todaySelfStudyMin > 0;
   const rank = rankForPoints(profile?.total_points ?? 0);
   const todayPct = todayTargetMin > 0
     ? Math.min(100, Math.round((todayActualMin / todayTargetMin) * 100))
@@ -219,7 +223,13 @@ export function HomeClient({
     <main className="mx-auto flex max-w-lg flex-col gap-6 px-4 py-8">
       {/* ストライク ＋ 自主学習連続 ＋ ランク */}
       <section className="grid grid-cols-3 gap-3">
-        <div className="rounded-2xl border border-orange-300 bg-orange-50 p-4 shadow-md shadow-orange-100">
+        <div
+          className={`rounded-2xl border p-4 shadow-md ${
+            hasStudiedToday
+              ? "border-orange-300 bg-orange-50 shadow-orange-100"
+              : "border-slate-400 bg-slate-200/65 shadow-slate-200"
+          }`}
+        >
           <div className="flex items-center gap-1 text-orange-600">
             <Flame className="h-4 w-4" />
             <span className="text-xs font-bold">連続</span>
@@ -231,7 +241,13 @@ export function HomeClient({
             {streak > 0 ? "明日も続けよう🌟" : "今日からスタート！"}
           </p>
         </div>
-        <div className="rounded-2xl border border-violet-300 bg-violet-50 p-4 shadow-md shadow-violet-100">
+        <div
+          className={`rounded-2xl border p-4 shadow-md ${
+            hasSelfStudiedToday
+              ? "border-violet-300 bg-violet-50 shadow-violet-100"
+              : "border-slate-400 bg-slate-200/65 shadow-slate-200"
+          }`}
+        >
           <div className="flex items-center gap-1 text-violet-600">
             <BookOpen className="h-4 w-4" />
             <span className="text-xs font-bold">自主学習</span>
@@ -243,15 +259,15 @@ export function HomeClient({
             {selfStudyStreak > 0 ? "自主学習続いてる！" : "自主学習を始めよう！"}
           </p>
         </div>
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-md shadow-amber-100">
-          <div className="flex items-center gap-1 text-amber-600">
+        <div className="rounded-2xl border border-emerald-300 bg-emerald-50 p-4 shadow-md shadow-emerald-100">
+          <div className="flex items-center gap-1 text-emerald-600">
             <Trophy className="h-4 w-4" />
             <span className="text-xs font-bold">ランク</span>
           </div>
-          <p className="mt-2 text-base font-bold leading-tight text-amber-800">
+          <p className="mt-2 text-base font-bold leading-tight text-emerald-800">
             {rank.name}
           </p>
-          <p className="mt-1 text-[10px] text-amber-500">
+          <p className="mt-1 text-[10px] text-emerald-500">
             累計 {profile?.total_points ?? 0} pt
           </p>
         </div>
