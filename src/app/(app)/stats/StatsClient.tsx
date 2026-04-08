@@ -498,8 +498,6 @@ export function StatsClient({
                         name="📚 宿題"
                         radius={[4, 4, 0, 0]}
                         fill="transparent"
-                        stroke="#2563eb"
-                        strokeWidth={2}
                       >
                         {kindChartData.map((d) => (
                           <Cell
@@ -513,8 +511,6 @@ export function StatsClient({
                         name="✨ 自主学習"
                         radius={[4, 4, 0, 0]}
                         fill="transparent"
-                        stroke="#dc2626"
-                        strokeWidth={2}
                       >
                         {kindChartData.map((d) => (
                           <Cell
