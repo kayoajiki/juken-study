@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { and, desc, eq, gte } from "drizzle-orm";
-import { getDb, studySessions, users } from "@/db";
+import { getDb, mailNotifications, studySessions, users } from "@/db";
 import { getSessionUserId } from "@/lib/auth/session";
 import { recordStudySessionDb } from "@/lib/record-session";
 import { rawPointsForSession } from "@/lib/points-rank";
@@ -10,6 +10,70 @@ import { tokyoYmd } from "@/lib/tokyo-date";
 import type { SubjectId } from "@/lib/subjects";
 import type { EarnedBadge } from "@/lib/badges";
 import type { RankDef } from "@/lib/points-rank";
+
+type MailKind = "rank_up" | "goal_achieved";
+
+async function sendMailViaResend(input: { subject: string; html: string }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RANKUP_MAIL_FROM;
+  const toRaw = process.env.FAMILY_NOTIFY_EMAILS ?? process.env.NOTIFY_EMAILS;
+  if (!apiKey || !from || !toRaw) return;
+
+  const to = toRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (to.length === 0) return;
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      subject: input.subject,
+      html: input.html,
+    }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`mail send failed: ${res.status} ${txt}`);
+  }
+}
+
+async function trySendDailyMail(input: {
+  userId: string;
+  dateKey: string;
+  kind: MailKind;
+  subject: string;
+  html: string;
+}) {
+  const db = getDb();
+  const [existing] = await db
+    .select({ id: mailNotifications.id })
+    .from(mailNotifications)
+    .where(
+      and(
+        eq(mailNotifications.userId, input.userId),
+        eq(mailNotifications.dateKey, input.dateKey),
+        eq(mailNotifications.kind, input.kind)
+      )
+    )
+    .limit(1);
+  if (existing) return;
+
+  await sendMailViaResend({ subject: input.subject, html: input.html });
+  await db.insert(mailNotifications).values({
+    id: crypto.randomUUID(),
+    userId: input.userId,
+    dateKey: input.dateKey,
+    kind: input.kind,
+    createdAt: new Date().toISOString(),
+  });
+}
 
 export async function recordStudySessionAction(input: {
   subject: SubjectId;
@@ -43,6 +107,7 @@ export async function recordStudySessionAction(input: {
   }
 
   try {
+    const db = getDb();
     const { awarded, newBadges, prevRank, newRank } = await recordStudySessionDb(getDb(), userId, {
       subject: input.subject,
       kind: input.kind,
@@ -50,6 +115,72 @@ export async function recordStudySessionAction(input: {
       startedAt,
       endedAt,
     });
+
+    // 通知は学習記録とは分離し、失敗しても記録を成功扱いにする
+    void (async () => {
+      try {
+        const [user] = await db
+          .select({
+            displayName: users.displayName,
+            dailyGoalMinutes: users.dailyGoalMinutes,
+          })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        if (!user) return;
+
+        const dateKey = tokyoYmd(new Date(input.endedAtIso));
+        const homeUrl = process.env.APP_BASE_URL
+          ? `${process.env.APP_BASE_URL.replace(/\/$/, "")}/`
+          : "https://example.com/";
+        const displayName = user.displayName?.trim() || "お子さま";
+
+        // 目標達成通知（1日1回）
+        if ((user.dailyGoalMinutes ?? 0) > 0) {
+          const todayStart = new Date(`${dateKey}T00:00:00+09:00`).toISOString();
+          const todayRows = await db
+            .select({ minutes: studySessions.minutes })
+            .from(studySessions)
+            .where(and(eq(studySessions.userId, userId), gte(studySessions.startedAt, todayStart)));
+          const todayTotal = todayRows.reduce((s, r) => s + r.minutes, 0);
+          if (todayTotal >= user.dailyGoalMinutes) {
+            await trySendDailyMail({
+              userId,
+              dateKey,
+              kind: "goal_achieved",
+              subject: "🎯 目標達成しました！",
+              html: `
+                <div style="font-family: system-ui, -apple-system, sans-serif; line-height:1.6;">
+                  <h2>🎯 ${displayName}さんが今日の目標を達成！</h2>
+                  <p>今日の学習時間は <b>${todayTotal}分</b> です。</p>
+                  <p><a href="${homeUrl}" style="display:inline-block;padding:10px 14px;background:#db2777;color:#fff;border-radius:8px;text-decoration:none;">🏠 ホームでスタンプ・コメントする</a></p>
+                </div>
+              `,
+            });
+          }
+        }
+
+        // ランクアップ通知（1日1回）
+        if (prevRank.id !== newRank.id) {
+          await trySendDailyMail({
+            userId,
+            dateKey,
+            kind: "rank_up",
+            subject: "🏆 ランクアップしました！",
+            html: `
+              <div style="font-family: system-ui, -apple-system, sans-serif; line-height:1.6;">
+                <h2>🏆 ${displayName}さんがランクアップ！</h2>
+                <p><b>${prevRank.name}</b> → <b>${newRank.name}</b></p>
+                <p><a href="${homeUrl}" style="display:inline-block;padding:10px 14px;background:#7c3aed;color:#fff;border-radius:8px;text-decoration:none;">🏠 ホームでスタンプ・コメントする</a></p>
+              </div>
+            `,
+          });
+        }
+      } catch (mailErr) {
+        console.error("mail notification failed:", mailErr);
+      }
+    })();
+
     return { ok: true, awarded, newBadges, prevRank, newRank };
   } catch (e) {
     console.error(e);

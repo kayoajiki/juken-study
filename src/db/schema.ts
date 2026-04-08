@@ -109,6 +109,24 @@ export const dailyGoalHistory = sqliteTable(
   ]
 );
 
+// メール通知の送信履歴（1ユーザー・1日・種別ごとに1回）
+export const mailNotifications = sqliteTable(
+  "mail_notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    dateKey: text("date_key").notNull(), // YYYY-MM-DD (Asia/Tokyo)
+    kind: text("kind").notNull(), // rank_up | goal_achieved
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("mail_notifications_user_day_kind_unique").on(t.userId, t.dateKey, t.kind),
+    index("mail_notifications_user_day_idx").on(t.userId, t.dateKey),
+  ]
+);
+
 // 家庭内で共有する「ホーム画面トピックス」スタンプ
 export const homeTopicStamps = sqliteTable(
   "home_topic_stamps",
