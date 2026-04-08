@@ -27,18 +27,20 @@ export async function updateProfileAction(input: {
 }
 
 export async function saveBreakBlockAction(
-  blockMinutes: number
+  blockMinutes: number,
+  breakMinutes: number
 ): Promise<ActionResult> {
   const userId = await getSessionUserId();
   if (!userId) return { ok: false, error: "未ログイン" };
   const db = getDb();
-  const breakMin = Math.max(1, Math.round(blockMinutes / 6));
+  const blockMin = Math.max(5, Math.min(180, Math.round(blockMinutes)));
+  const breakMin = Math.max(0, Math.min(30, Math.round(breakMinutes)));
   // 既存ルールをすべて削除して1件だけ挿入
   await db.delete(breakRules).where(eq(breakRules.userId, userId));
   await db.insert(breakRules).values({
     id: crypto.randomUUID(),
     userId,
-    minBlockMinutes: blockMinutes,
+    minBlockMinutes: blockMin,
     maxBlockMinutes: 9999,
     breakMinutes: breakMin,
     sortOrder: 0,

@@ -470,51 +470,63 @@ export function StatsClient({
 
           {/* 教科別 宿題 vs 自主学習 */}
           <div className="rounded-2xl border-2 border-sky-200 bg-white p-4 shadow-md shadow-sky-100">
-            <p className="mb-3 text-xs font-bold text-sky-700">📚 宿題 vs ✨ 自主学習（教科別）</p>
+            <p className="mb-3 text-xs font-bold text-sky-700">📚 宿題＆✨ 自主学習（強化別）</p>
             {kindChartData.length === 0 ? (
               <p className="py-4 text-center text-sm text-slate-400">記録がありません</p>
             ) : (
-              <div className="h-52">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={kindChartData}
-                    margin={{ top: 4, right: 4, left: -8, bottom: 0 }}
-                    barCategoryGap="25%"
-                    barGap={2}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#bae6fd" />
-                    <XAxis dataKey="label" tick={{ fill: "#0369a1", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "#0369a1", fontSize: 11 }} />
-                    <Tooltip
-                      contentStyle={{ background: "#e0f2fe", border: "1px solid #7dd3fc" }}
-                      formatter={(v: unknown, name: unknown) => [
-                        `${v}分`,
-                        name === "homework" ? "📚 宿題" : "✨ 自主学習",
-                      ]}
-                    />
-                    <Legend
-                      formatter={(v) => v === "homework" ? "📚 宿題" : "✨ 自主学習"}
-                      wrapperStyle={{ fontSize: 12 }}
-                    />
-                    <Bar dataKey="homework" radius={[4, 4, 0, 0]}>
-                      {kindChartData.map((d) => (
-                        <Cell
-                          key={`homework-${d.id}`}
-                          fill={kindSubjectColors[d.id]?.homework ?? "#38bdf8"}
-                        />
-                      ))}
-                    </Bar>
-                    <Bar dataKey="self_study" radius={[4, 4, 0, 0]}>
-                      {kindChartData.map((d) => (
-                        <Cell
-                          key={`self-study-${d.id}`}
-                          fill={kindSubjectColors[d.id]?.self_study ?? "#fb923c"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <>
+                <div className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={kindChartData}
+                      margin={{ top: 4, right: 4, left: -8, bottom: 0 }}
+                      barCategoryGap="25%"
+                      barGap={2}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#bae6fd" />
+                      <XAxis dataKey="label" tick={{ fill: "#0369a1", fontSize: 11 }} />
+                      <YAxis tick={{ fill: "#0369a1", fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ background: "#e0f2fe", border: "1px solid #7dd3fc" }}
+                        formatter={(v: unknown, name: unknown) => [
+                          `${v}分`,
+                          name === "homework" ? "📚 宿題" : "✨ 自主学習",
+                        ]}
+                      />
+                      <Bar
+                        dataKey="homework"
+                        name="📚 宿題"
+                        radius={[4, 4, 0, 0]}
+                        fill="transparent"
+                        stroke="#2563eb"
+                        strokeWidth={2}
+                      >
+                        {kindChartData.map((d) => (
+                          <Cell
+                            key={`homework-${d.id}`}
+                            fill={kindSubjectColors[d.id]?.homework ?? "#38bdf8"}
+                          />
+                        ))}
+                      </Bar>
+                      <Bar
+                        dataKey="self_study"
+                        name="✨ 自主学習"
+                        radius={[4, 4, 0, 0]}
+                        fill="transparent"
+                        stroke="#dc2626"
+                        strokeWidth={2}
+                      >
+                        {kindChartData.map((d) => (
+                          <Cell
+                            key={`self-study-${d.id}`}
+                            fill={kindSubjectColors[d.id]?.self_study ?? "#fb923c"}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
             )}
           </div>
 

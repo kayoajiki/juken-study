@@ -218,8 +218,6 @@ export function ScheduleClient({
 
   // goalHistory のローカルコピー（保存後に即反映するため）
   const [localGoalHistory, setLocalGoalHistory] = useState<GoalHistoryEntry[]>(goalHistory);
-  const localGoalHistoryRef = useRef(localGoalHistory);
-  localGoalHistoryRef.current = localGoalHistory;
 
   // 2. 時刻（開始・終了）
   const [startHour, setStartHour] = useState(17);
@@ -235,34 +233,30 @@ export function ScheduleClient({
 
   const [archivedForDate, setArchivedForDate] = useState<ScheduleRow[]>([]);
 
-  // 選択日の実効目標を返すヘルパー（最後に設定した目標を継承）
+  // 選択日の目標を返すヘルパー（その日だけ適用）
   const targetForDate = useMemo(() => {
-    const sorted = [...localGoalHistory].sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
+    const byDate = new Map(localGoalHistory.map((g) => [g.effectiveDate, g.minutes]));
     return (ymd: string): number => {
-      let target = 0;
-      for (const h of sorted) {
-        if (h.effectiveDate <= ymd) target = h.minutes;
-        else break;
-      }
-      return target;
+      const exact = byDate.get(ymd);
+      if (exact != null) return exact;
+      // 今日は users.dailyGoalMinutes と一致させる
+      return ymd === todayKey ? dailyGoalMinutes : 0;
     };
-  }, [localGoalHistory]);
+  }, [localGoalHistory, todayKey, dailyGoalMinutes]);
 
   // カレンダーで日付を選んだらその日の目標をピッカーに反映
   useEffect(() => {
-    const sorted = [...localGoalHistoryRef.current].sort((a, b) =>
-      a.effectiveDate.localeCompare(b.effectiveDate)
-    );
-    let target = 0;
-    for (const h of sorted) {
-      if (h.effectiveDate <= selectedDate) target = h.minutes;
-      else break;
+    const exact = localGoalHistory.find((h) => h.effectiveDate === selectedDate)?.minutes;
+    const target = exact ?? (selectedDate === todayKey ? dailyGoalMinutes : 0);
+    if (target <= 0) {
+      // 未設定日のデフォルトは 01:00
+      setTargetHour(1);
+      setTargetMin(0);
+      return;
     }
     setTargetHour(Math.floor(target / 60));
     setTargetMin(target % 60 < 30 ? 0 : 30);
-  // selectedDate が変わったときだけ実行（goalHistory 更新ではリセットしない）
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
+  }, [selectedDate, localGoalHistory, todayKey, dailyGoalMinutes]);
 
   // メモ
   const [memosByDate, setMemosByDate] = useState<Record<string, MemoRow[]>>(() => {

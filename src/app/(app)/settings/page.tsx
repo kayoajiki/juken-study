@@ -24,11 +24,13 @@ export default async function SettingsPage() {
     .orderBy(asc(breakRules.sortOrder));
 
   const blockMinutes = rules[0]?.minBlockMinutes ?? 30;
+  const breakMinutes = rules[0]?.breakMinutes ?? Math.max(1, Math.round(blockMinutes / 6));
 
   return (
     <SettingsClient
       profile={prof[0] ?? null}
       blockMinutes={blockMinutes}
+      breakMinutes={breakMinutes}
     />
   );
 }

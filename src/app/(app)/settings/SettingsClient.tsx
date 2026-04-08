@@ -11,20 +11,21 @@ import {
 export function SettingsClient({
   profile,
   blockMinutes: initialBlockMinutes,
+  breakMinutes: initialBreakMinutes,
 }: {
   profile: {
     display_name: string | null;
     notification_enabled: boolean | null;
   } | null;
   blockMinutes: number;
+  breakMinutes: number;
 }) {
   const router = useRouter();
   const [name, setName] = useState(profile?.display_name ?? "");
   const [notif, setNotif] = useState(profile?.notification_enabled ?? true);
   const [blockMin, setBlockMin] = useState(initialBlockMinutes);
+  const [breakMin, setBreakMin] = useState(initialBreakMinutes);
   const [msg, setMsg] = useState<string | null>(null);
-
-  const breakMin = Math.max(1, Math.round(blockMin / 6));
 
   const saveProfile = async () => {
     setMsg(null);
@@ -57,7 +58,7 @@ export function SettingsClient({
 
   const saveBreak = async () => {
     setMsg(null);
-    const res = await saveBreakBlockAction(blockMin);
+    const res = await saveBreakBlockAction(blockMin, breakMin);
     if (!res.ok) setMsg(res.error);
     else setMsg(`休憩ルールを保存しました（${blockMin}分勉強 → ${breakMin}分休憩）`);
   };
@@ -130,6 +131,20 @@ export function SettingsClient({
             max={180}
             value={blockMin}
             onChange={(e) => setBlockMin(Number(e.target.value))}
+            className="w-24 rounded-lg border border-fuchsia-200 bg-violet-50 px-3 py-2 font-bold text-violet-900"
+          />
+          <span className="font-semibold text-violet-700">分</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-bold text-violet-700">
+            休憩時間
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={30}
+            value={breakMin}
+            onChange={(e) => setBreakMin(Number(e.target.value))}
             className="w-24 rounded-lg border border-fuchsia-200 bg-violet-50 px-3 py-2 font-bold text-violet-900"
           />
           <span className="font-semibold text-violet-700">分</span>
